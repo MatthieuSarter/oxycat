@@ -106,8 +106,60 @@ impl OxycatApp {
 
 #[cfg(test)]
 mod tests {
+    use egui_kittest::kittest::Queryable;
+
     use super::SettingsDraft;
-    use crate::config::Settings;
+    use crate::catalog::store::CatalogDir;
+    use crate::config::{Settings, load_settings};
+    use crate::gui::tests::{harness, shows};
+
+    #[test]
+    fn settings_window_validates_then_saves() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut harness = harness(CatalogDir::new(tmp.path().to_path_buf()));
+        harness.run_steps(2);
+        let mut draft = SettingsDraft::from(&Settings::default());
+        draft.hit_limit = "many".to_owned();
+        harness.state_mut().settings_window = Some(draft);
+        harness.run_steps(8);
+        harness.get_by_label("Save").click();
+        harness.run_steps(2);
+        assert!(shows(&harness, "Invalid value"));
+        assert!(harness.state().settings_window.as_ref().is_some_and(|d| d.error));
+
+        harness.state_mut().settings_window.as_mut().unwrap().hit_limit = "50".to_owned();
+        harness.run_steps(2);
+        harness.get_by_label("Save").click();
+        harness.run_steps(2);
+        assert!(harness.state().settings_window.is_none());
+        assert_eq!(harness.state().settings.hit_limit, 50);
+        assert_eq!(load_settings(tmp.path()).0.hit_limit, 50);
+    }
+
+    #[test]
+    fn settings_window_closes_without_saving() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut harness = harness(CatalogDir::new(tmp.path().to_path_buf()));
+        harness.run_steps(2);
+        let mut draft = SettingsDraft::from(&Settings::default());
+        draft.hit_limit = "50".to_owned();
+        harness.state_mut().settings_window = Some(draft);
+        harness.run_steps(8);
+        harness.get_by_label("Close").click();
+        harness.run_steps(2);
+        assert!(harness.state().settings_window.is_none());
+        assert_eq!(harness.state().settings.hit_limit, Settings::default().hit_limit);
+    }
+
+    #[test]
+    fn about_window_shows_the_version() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut harness = harness(CatalogDir::new(tmp.path().to_path_buf()));
+        harness.state_mut().about_open = true;
+        harness.run_steps(3);
+        assert!(shows(&harness, &format!("Version {}", env!("CARGO_PKG_VERSION"))));
+        assert!(harness.state().about_open);
+    }
 
     #[test]
     fn draft_validation() {

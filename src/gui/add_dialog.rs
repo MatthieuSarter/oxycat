@@ -296,3 +296,157 @@ impl OxycatApp {
         ctx.request_repaint_after(std::time::Duration::from_millis(200));
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+    use std::sync::atomic::Ordering;
+    use std::sync::mpsc::channel;
+
+    use egui_kittest::kittest::Queryable;
+
+    use super::{AddDialog, ScanJob};
+    use crate::catalog::query::tests::catalog_of;
+    use crate::catalog::scan::ScanControl;
+    use crate::catalog::store::CatalogDir;
+    use crate::config::Settings;
+    use crate::gui::app::Pending;
+    use crate::gui::tests::{harness, shows, step_until};
+
+    /// Lets the add dialog finish its layout: until then its buttons are not where the accessibility tree says.
+    fn settle(harness: &mut egui_kittest::Harness<'static, crate::gui::app::OxycatApp>) {
+        harness.run_steps(8);
+    }
+
+    #[test]
+    fn add_dialog_catalogs_a_folder() {
+        let tmp = tempfile::tempdir().unwrap();
+        let src = tmp.path().join("Photos");
+        std::fs::create_dir_all(src.join("2026")).unwrap();
+        std::fs::write(src.join("2026").join("a.jpg"), b"jpg").unwrap();
+        let mut harness = harness(CatalogDir::new(tmp.path().join("catalogs")));
+        harness.run_steps(2);
+        harness.state_mut().add = Some(AddDialog::for_source(&src, &Settings::default()));
+        settle(&mut harness);
+        // The name is proposed from the folder.
+        assert!(shows(&harness, "Photos"));
+        harness.get_by_label("Catalog").click();
+        step_until(&mut harness, |app| app.job.is_none() && !app.listing.catalogs.is_empty());
+        let banner = harness.state().banner.clone().unwrap_or_default();
+        assert!(banner.contains("Catalog \"Photos\" created: 1 files, 1 folders"), "{banner:?}");
+        assert!(harness.state().add.is_none());
+    }
+
+    #[test]
+    fn missing_source_is_reported() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut harness = harness(CatalogDir::new(tmp.path().to_path_buf()));
+        harness.state_mut().add = Some(AddDialog::for_source(&tmp.path().join("gone"), &Settings::default()));
+        settle(&mut harness);
+        harness.get_by_label("Catalog").click();
+        harness.run_steps(2);
+        let banner = harness.state().banner.clone().unwrap_or_default();
+        assert!(banner.contains("not found"), "{banner:?}");
+        assert!(harness.state().job.is_none());
+    }
+
+    #[test]
+    fn cancel_closes_the_add_dialog() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut harness = harness(CatalogDir::new(tmp.path().to_path_buf()));
+        harness.state_mut().add = Some(AddDialog::empty(&Settings::default()));
+        harness.run_steps(2);
+        settle(&mut harness);
+        harness.get_by_label("Cancel").click();
+        harness.run_steps(2);
+        assert!(harness.state().add.is_none());
+    }
+
+    #[test]
+    fn same_name_for_another_source_asks_before_overwriting() {
+        let (tmp, first) = catalog_of("B1", &[("a.txt", Some(1))]);
+        let other = tmp.path().join("other").join("B1");
+        std::fs::create_dir_all(&other).unwrap();
+        std::fs::write(other.join("b.txt"), b"b").unwrap();
+        std::fs::write(other.join("c.txt"), b"c").unwrap();
+        let mut harness = harness(CatalogDir::new(tmp.path().to_path_buf()));
+        harness.run_steps(2);
+        harness.state_mut().add = Some(AddDialog::for_source(&other, &Settings::default()));
+        settle(&mut harness);
+        harness.get_by_label("Catalog").click();
+        harness.run_steps(2);
+        assert!(matches!(harness.state().pending, Some(Pending::Overwrite(_))));
+        harness.get_by_label("OK").click();
+        step_until(&mut harness, |app| {
+            app.job.is_none() && app.listing.catalogs.first().is_some_and(|c| c.volume.file_count == 2)
+        });
+        assert_eq!(harness.state().listing.catalogs.len(), 1);
+        assert_eq!(harness.state().listing.catalogs[0].file, first.file);
+    }
+
+    #[test]
+    fn rename_then_delete_a_catalog() {
+        let (tmp, info) = catalog_of("B1", &[("a.txt", Some(1))]);
+        let mut harness = harness(CatalogDir::new(tmp.path().to_path_buf()));
+        harness.run_steps(2);
+        harness.state_mut().pending = Some(Pending::Rename { file: info.file.clone(), draft: "Blue".to_owned() });
+        harness.run_steps(2);
+        harness.get_by_label("OK").click();
+        harness.run_steps(3);
+        let renamed = harness.state().listing.catalogs[0].clone();
+        assert_eq!(renamed.volume.name, "Blue");
+        assert_eq!(harness.state().selected.as_ref(), Some(&renamed.file));
+
+        // Cancel keeps the catalog, OK deletes it.
+        let pending = || Pending::Delete { file: renamed.file.clone(), name: "Blue".to_owned() };
+        harness.state_mut().pending = Some(pending());
+        harness.run_steps(2);
+        harness.get_by_label("Cancel").click();
+        harness.run_steps(2);
+        assert!(renamed.file.exists());
+        harness.state_mut().pending = Some(pending());
+        harness.run_steps(2);
+        harness.get_by_label("OK").click();
+        harness.run_steps(3);
+        assert!(!renamed.file.exists());
+        assert_eq!(harness.state().listing.catalogs, [] as [crate::catalog::store::CatalogInfo; 0]);
+    }
+
+    #[test]
+    fn failed_rename_is_reported() {
+        let (tmp, info) = catalog_of("B1", &[("a.txt", Some(1))]);
+        let mut harness = harness(CatalogDir::new(tmp.path().to_path_buf()));
+        harness.run_steps(2);
+        // The catalog file vanished in the meantime.
+        std::fs::remove_file(&info.file).unwrap();
+        harness.state_mut().pending = Some(Pending::Rename { file: info.file.clone(), draft: "Blue".to_owned() });
+        harness.run_steps(2);
+        harness.get_by_label("OK").click();
+        harness.run_steps(2);
+        let banner = harness.state().banner.clone().unwrap_or_default();
+        assert!(banner.starts_with("Error: "), "{banner:?}");
+    }
+
+    #[test]
+    fn progress_cancel_and_lost_scan_thread() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut harness = harness(CatalogDir::new(tmp.path().to_path_buf()));
+        let ctl = Arc::new(ScanControl::default());
+        ctl.entries.store(1234, Ordering::Relaxed);
+        let (tx, rx) = channel();
+        let job = ScanJob { name: "B1".to_owned(), source: "E:\\".to_owned(), ctl: Arc::clone(&ctl), rx };
+        harness.state_mut().job = Some(job);
+        harness.run_steps(2);
+        assert!(shows(&harness, "Cataloging \"B1\"…"));
+        harness.get_by_label("Cancel").click();
+        harness.run_steps(2);
+        assert!(ctl.cancel.load(Ordering::Relaxed));
+
+        // The scan thread dies without answering: the job ends with an error instead of spinning forever.
+        drop(tx);
+        harness.run_steps(2);
+        assert!(harness.state().job.is_none());
+        let banner = harness.state().banner.clone().unwrap_or_default();
+        assert!(banner.contains("scan thread stopped"), "{banner:?}");
+    }
+}
