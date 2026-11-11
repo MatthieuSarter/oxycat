@@ -83,13 +83,18 @@ pub fn load_settings(dir: &Path) -> (Settings, Option<String>) {
     }
 }
 
-/// Writes the settings to the catalog directory.
+/// Writes the settings to the catalog directory, through a temporary file renamed over the old one so that a crash
+/// mid-write never leaves a truncated file.
 ///
 /// # Errors
 /// Any I/O error, e.g. a read-only catalog directory.
 pub fn save_settings(dir: &Path, settings: &Settings) -> std::io::Result<()> {
     let text = toml::to_string(settings).map_err(std::io::Error::other)?;
-    std::fs::write(dir.join(SETTINGS_FILE), text)
+    let tmp = dir.join(format!("{SETTINGS_FILE}.tmp"));
+    std::fs::write(&tmp, text)?;
+    std::fs::rename(&tmp, dir.join(SETTINGS_FILE)).inspect_err(|_| {
+        let _ = std::fs::remove_file(&tmp);
+    })
 }
 
 #[cfg(test)]
@@ -166,5 +171,15 @@ mod tests {
         };
         save_settings(tmp.path(), &settings).unwrap();
         assert_eq!(load_settings(tmp.path()), (settings, None));
+        // Saving again replaces the file and leaves no temporary file behind.
+        save_settings(tmp.path(), &Settings::default()).unwrap();
+        assert_eq!(load_settings(tmp.path()), (Settings::default(), None));
+        assert_eq!(std::fs::read_dir(tmp.path()).unwrap().count(), 1);
+    }
+
+    #[test]
+    fn save_fails_in_missing_dir() {
+        let tmp = tempfile::tempdir().unwrap();
+        assert!(save_settings(&tmp.path().join("missing"), &Settings::default()).is_err());
     }
 }
