@@ -115,7 +115,6 @@ impl OxycatApp {
         let fmt = Fmt::new(lang, &settings);
         let banner = warning.map(|w| fill(fmt.s.settings_invalid, &[("warning", &w)]));
         let mounted: Mounted = Arc::default();
-        spawn_mount_watcher(Arc::clone(&mounted), ctx.clone());
         let mut app = OxycatApp {
             dir,
             settings,
@@ -143,6 +142,9 @@ impl OxycatApp {
         };
         app.apply_theme(ctx);
         app.reload();
+        // Started once `reload` has filled `probe`: its first pass then already checks serial-less media, instead of
+        // reporting them unplugged until the next pass 3 s later.
+        spawn_mount_watcher(Arc::clone(&app.mounted), ctx.clone());
         app
     }
 

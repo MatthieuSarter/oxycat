@@ -191,10 +191,12 @@ fn folder_tree_browses_and_expands() {
 #[test]
 fn double_click_on_missing_file_explains() {
     let (tmp, info) = catalog_of("B1", &[("notes.txt", Some(4))]);
-    // The file is gone from the (still mounted) medium: opening must not launch anything but say why.
-    std::fs::remove_dir_all(tmp.path().join("src")).unwrap();
+    // The file is gone from the (still mounted) medium: opening must not launch anything but say why. Only the file
+    // goes: without a volume serial (Linux CI), the source folder's presence is what says the medium is plugged in.
+    std::fs::remove_file(tmp.path().join("src").join("notes.txt")).unwrap();
     let mut harness = harness(CatalogDir::new(tmp.path().to_path_buf()));
-    harness.run_steps(2);
+    // The mount watcher thread reports the medium asynchronously.
+    step_until(&mut harness, |app| app.locate(&info.volume).is_some());
     harness.state_mut().open_folder(&info.file, None, None);
     harness.run_steps(2);
     for _ in 0..2 {
