@@ -10,6 +10,26 @@ same organization, same search features, instant browsing.
 - Interface in French, English and Spanish; light, dark and automatic themes.
 - Windows first, Linux supported.
 
+Cathy was a great lightweight tools, that I used for almost thirty years. But recently I had a lot of perfomance
+issues with it, some operations, like double clicking on a folder from a big catalog in the search results, were
+causing my whole system to lag for dozens of seconds. It was time to move on.
+
+## 🤖 AI Usage Disclaimer
+
+This project was built entirely via "vibe coding" using **Claude Opus 5.5**. For me this project is both motivated by
+an utilitarian point of view and an educational one: I wanted to test how I can write a complete Rust app without much
+knowledge of Rust and its ecosystem.
+
+As an experienced software developer without a background in Rust, I relied on AI assistance for the complete codebase,
+documentation included, except some paragraphs of this README file.
+.
+While the project is functional and tested for its intended use case (ie. my own personal usage), please keep in mind:
+- **Code Quality:** Parts of the implementation might not follow idiomatic Rust patterns (*clippy* fans, be gentle!).
+- **Security & Performance:** The code has not been audited by an experienced Rust engineer.
+- **Contributions:** PRs, refactoring, and idiomatic Rust improvements are extremely welcome!
+
+For those reasons, I won't provide any pre-compiled binary. Build and use it at your own risks.
+
 ## Build and run
 
 Requires a stable Rust toolchain (1.98+).
