@@ -38,3 +38,7 @@ run *args:
 # Build the release binary
 build:
     cargo build --release
+
+# Redraw the icon assets (assets/icon.png and assets/icon.ico)
+icon:
+    uv run --script scripts/make_icon.py

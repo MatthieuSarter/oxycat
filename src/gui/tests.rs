@@ -205,3 +205,9 @@ fn double_click_on_missing_file_explains() {
     let banner = harness.state().banner.clone().unwrap_or_default();
     assert!(banner.contains("Not found on the plugged-in medium"), "{banner:?}");
 }
+
+#[test]
+fn icon_decodes() {
+    let icon = super::icon();
+    assert_eq!((icon.width, icon.height), (256, 256));
+}

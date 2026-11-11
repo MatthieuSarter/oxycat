@@ -5,6 +5,9 @@
 - Rust stable 1.98 or later (`rustup`), with the `llvm-tools-preview` component for coverage.
 - `cargo install cargo-llvm-cov cargo-deny`.
 - [just](https://just.systems) and the globally installed `repo-linter`.
+- On Windows, the Windows SDK (installed with the MSVC build tools): `build.rs` embeds the icon in the executable with
+  its resource compiler.
+- [uv](https://docs.astral.sh/uv/), only to redraw the icon.
 
 ## Recipes
 
@@ -16,6 +19,7 @@
 | `just coverage` | line coverage, HTML report under `.reports/coverage/`, fails below 80 % |
 | `just run -- <args>` | run Oxycat (GUI without arguments, CLI with a sub-command) |
 | `just build` | release build |
+| `just icon` | redraw `assets/icon.png` (window icon) and `assets/icon.ico` (executable icon) from `scripts/make_icon.py` |
 
 ## Coverage scope
 

@@ -21,7 +21,8 @@ pub fn run(dir: CatalogDir, settings: Settings, warning: Option<String>) -> efra
             .with_title("Oxycat")
             .with_inner_size([1180.0, 720.0])
             .with_min_inner_size([760.0, 420.0])
-            .with_drag_and_drop(true),
+            .with_drag_and_drop(true)
+            .with_icon(icon()),
         ..eframe::NativeOptions::default()
     };
     eframe::run_native(
@@ -30,5 +31,13 @@ pub fn run(dir: CatalogDir, settings: Settings, warning: Option<String>) -> efra
         Box::new(move |cc| Ok(Box::new(app::OxycatApp::new(&cc.egui_ctx, dir, settings, warning)))),
     )
 }
+
+/// Window and taskbar icon, drawn by `scripts/make_icon.py` (the executable embeds `assets/icon.ico` through
+/// `build.rs`).
+fn icon() -> egui::IconData {
+    eframe::icon_data::from_png_bytes(include_bytes!("../../assets/icon.png"))
+        .expect("the embedded icon is a valid PNG")
+}
+
 #[cfg(test)]
 mod tests;
