@@ -6,6 +6,7 @@ use std::path::MAIN_SEPARATOR;
 use rusqlite::{Connection, ToSql, params_from_iter};
 
 use super::store::CatalogInfo;
+use crate::core::listing::DirTree;
 use crate::core::model::{Entry, Hit, KindFilter, SearchQuery};
 
 /// Entries of a folder (`None` = top of the cataloged source): folders first, then by folded name.
@@ -120,17 +121,26 @@ pub fn search_catalog(
     .collect()
 }
 
+/// Sub-folders of every folder of the catalog, by folded name.
+///
+/// # Errors
+/// Any SQLite error.
+pub fn dir_tree(conn: &Connection) -> rusqlite::Result<DirTree> {
+    let mut stmt = conn.prepare("SELECT id, parent_id, name FROM entries WHERE is_dir = 1 ORDER BY name_fold, name")?;
+    let mut kids = DirTree::new();
+    for row in stmt.query_map([], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, Option<i64>>(1)?, r.get::<_, String>(2)?)))? {
+        let (id, parent, name) = row?;
+        kids.entry(parent).or_default().push((id, name));
+    }
+    Ok(kids)
+}
+
 /// Every folder below `dir` (`None` = whole catalog) with its depth (0 = direct child), depth first, by name.
 ///
 /// # Errors
 /// Any SQLite error.
 pub fn subtree_dirs(conn: &Connection, dir: Option<i64>) -> rusqlite::Result<Vec<(usize, String)>> {
-    let mut stmt = conn.prepare("SELECT id, parent_id, name FROM entries WHERE is_dir = 1 ORDER BY name_fold, name")?;
-    let mut kids: HashMap<Option<i64>, Vec<(i64, String)>> = HashMap::new();
-    for row in stmt.query_map([], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, Option<i64>>(1)?, r.get::<_, String>(2)?)))? {
-        let (id, parent, name) = row?;
-        kids.entry(parent).or_default().push((id, name));
-    }
+    let kids = dir_tree(conn)?;
     let mut out = Vec::new();
     // Explicit stack (children pushed in reverse) keeps the name order without recursion depth limits.
     let mut stack: Vec<(usize, i64, String)> =

@@ -48,25 +48,25 @@ fn search_then_open_folder() {
     step_until(&mut harness, |app| !app.search.hits.is_empty());
     // Accent-insensitive: "asterix" finds the "Astérix" folder.
     assert_eq!(harness.state().search.hits.len(), 1);
-    assert!(shows(&harness, "📁 Astérix"));
+    assert!(shows(&harness, "Astérix"));
 
     // Double-click the result (after a pause, or egui counts a triple click with the Search click): the Folders
     // tab opens on its parent (BD) with the result selected.
     harness.run_steps(30);
     for _ in 0..2 {
-        harness.query_all_by(|n| n.value().is_some_and(|v| v == "📁 Astérix")).next().unwrap().click();
+        harness.query_all_by(|n| n.value().is_some_and(|v| v == "Astérix")).next().unwrap().click();
         harness.step();
     }
     harness.run_steps(3);
     assert_eq!(harness.state().tab, Tab::Folders);
     assert_eq!(harness.state().folders.selection.rows.len(), 1);
-    assert!(shows(&harness, "📄 Tintin.cbz"));
+    assert!(shows(&harness, "Tintin.cbz"));
 
     // Backspace goes up to the top of the source.
     harness.key_press(egui::Key::Backspace);
     harness.run_steps(3);
-    assert!(shows(&harness, "📁 BD"));
-    assert!(!shows(&harness, "📄 Tintin.cbz"));
+    assert!(harness.query_by_role_and_label(Role::Label, "BD").is_some());
+    assert!(!shows(&harness, "Tintin.cbz"));
 }
 
 /// Whether some widget displays exactly `text`.
@@ -157,4 +157,33 @@ fn filter_labels_are_left_of_their_combo_boxes() {
         let combo = harness.get_by_role_and_label(Role::ComboBox, label).rect();
         assert!(text.max.x <= combo.min.x, "{label}: label {text:?} should be left of {combo:?}");
     }
+}
+
+/// Whether the folder tree shows a node named `name` (list cells are plain labels, tree nodes are buttons).
+fn tree_shows(harness: &Harness<'static, OxycatApp>, name: &str) -> bool {
+    harness.query_by_role_and_label(Role::Button, name).is_some()
+}
+
+#[test]
+fn folder_tree_browses_and_expands() {
+    let (tmp, info) = catalog_of("B1", &[("BD/Astérix/01.cbz", Some(3)), ("BD/Tintin.cbz", Some(4)), ("Films", None)]);
+    let mut harness = harness(CatalogDir::new(tmp.path().to_path_buf()));
+    harness.run_steps(2);
+    harness.state_mut().open_folder(&info.file, None, None);
+    harness.run_steps(2);
+    // The root is expanded: its sub-folders are listed, theirs are not yet.
+    assert!(tree_shows(&harness, "Films"));
+    assert!(!tree_shows(&harness, "Astérix"));
+
+    // A click on a tree node shows that folder and expands its branch.
+    harness.get_by_role_and_label(Role::Button, "BD").click();
+    harness.run_steps(2);
+    assert!(shows(&harness, "Tintin.cbz"));
+    assert!(tree_shows(&harness, "Astérix"));
+
+    // The arrow collapses it again without leaving the folder.
+    harness.get_all_by_label("⏷").nth(1).unwrap().click();
+    harness.run_steps(2);
+    assert!(!tree_shows(&harness, "Astérix"));
+    assert!(shows(&harness, "Tintin.cbz"));
 }

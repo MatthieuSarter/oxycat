@@ -1,6 +1,7 @@
 //! Pure helpers behind the interface lists: filtering, sorting, totals, clipboard and tree export, date display.
 
 use std::cmp::Ordering;
+use std::collections::{HashMap, HashSet};
 use std::fmt::{Display, Write};
 
 use chrono::TimeZone;
@@ -96,6 +97,44 @@ pub fn tree_text(root: &str, dirs: &[(usize, String)]) -> String {
     out
 }
 
+/// Sub-folders of every folder (`None` = top of the source), each list sorted by name: (id, name).
+pub type DirTree = HashMap<Option<i64>, Vec<(i64, String)>>;
+
+/// One visible line of a folder tree.
+#[derive(Debug, PartialEq, Eq)]
+pub struct TreeRow<'a> {
+    /// For each folder from the top level down to this one (empty for the root): whether a sibling follows it below,
+    /// i.e. whether the tree's connector line continues past this row at that level. Its length is the nesting level.
+    pub follows: Vec<bool>,
+    /// Folder id, `None` for the root.
+    pub id: Option<i64>,
+    /// Displayed name.
+    pub name: &'a str,
+    /// Whether the folder has sub-folders (and so can be expanded).
+    pub has_children: bool,
+}
+
+/// Visible lines of a folder tree, depth first: the root (named `root`), then the sub-folders of every expanded one.
+#[must_use]
+pub fn visible_tree<'a>(root: &'a str, tree: &'a DirTree, expanded: &HashSet<Option<i64>>) -> Vec<TreeRow<'a>> {
+    let has_children = |id: Option<i64>| tree.get(&id).is_some_and(|k| !k.is_empty());
+    let mut out = Vec::new();
+    // Explicit stack (children pushed in reverse) keeps the name order without recursion depth limits.
+    let mut stack = vec![(Vec::new(), None, root)];
+    while let Some((follows, id, name)) = stack.pop() {
+        if expanded.contains(&id) {
+            let kids = tree.get(&id).map_or(&[][..], Vec::as_slice);
+            stack.extend(kids.iter().enumerate().rev().map(|(i, (c, n))| {
+                let mut chain = follows.clone();
+                chain.push(i + 1 < kids.len());
+                (chain, Some(*c), n.as_str())
+            }));
+        }
+        out.push(TreeRow { follows, id, name, has_children: has_children(id) });
+    }
+    out
+}
+
 /// Formats a UTC Unix timestamp in a time zone with a `chrono` format; empty when out of range or when the format is
 /// invalid (it may come from the settings file).
 #[must_use]
@@ -117,9 +156,11 @@ where
 mod tests {
     use chrono::{FixedOffset, Utc};
 
+    use std::collections::HashSet;
+
     use super::{
-        NEWLINE, SortKey, filter_catalogs, format_timestamp, rows_to_tsv, selection_total, sort_entries, sort_hits,
-        tree_text,
+        DirTree, NEWLINE, SortKey, TreeRow, filter_catalogs, format_timestamp, rows_to_tsv, selection_total,
+        sort_entries, sort_hits, tree_text, visible_tree,
     };
     use crate::catalog::store::CatalogInfo;
     use crate::catalog::store::tests::sample_volume;
@@ -211,6 +252,38 @@ mod tests {
     fn tree_indentation() {
         let dirs = vec![(0, "A".to_owned()), (1, "B".to_owned()), (0, "C".to_owned())];
         assert_eq!(tree_text("B1:\\BD", &dirs), format!("B1:\\BD{NEWLINE}  A{NEWLINE}    B{NEWLINE}  C{NEWLINE}"));
+    }
+
+    #[test]
+    fn tree_rows_follow_expansion() {
+        let tree: DirTree = [
+            (None, vec![(1, "A".to_owned()), (2, "Z".to_owned())]),
+            (Some(1), vec![(3, "B".to_owned())]),
+            (Some(3), vec![(4, "C".to_owned())]),
+        ]
+        .into_iter()
+        .collect();
+        let row =
+            |follows: &[bool], id, name, has_children| TreeRow { follows: follows.to_vec(), id, name, has_children };
+        assert_eq!(visible_tree("B1", &tree, &HashSet::new()), [row(&[], None, "B1", true)]);
+        // A collapsed folder hides its sub-folders even when they are expanded themselves.
+        let expanded = HashSet::from([None, Some(3)]);
+        assert_eq!(
+            visible_tree("B1", &tree, &expanded),
+            [row(&[], None, "B1", true), row(&[true], Some(1), "A", true), row(&[false], Some(2), "Z", false)]
+        );
+        // The line of A continues down to Z, past B and C; B and C are the last of their siblings.
+        let expanded = HashSet::from([None, Some(1), Some(3)]);
+        let rows: Vec<(Vec<bool>, &str)> =
+            visible_tree("B1", &tree, &expanded).into_iter().map(|r| (r.follows, r.name)).collect();
+        let expected: Vec<(Vec<bool>, &str)> = vec![
+            (vec![], "B1"),
+            (vec![true], "A"),
+            (vec![true, false], "B"),
+            (vec![true, false, false], "C"),
+            (vec![false], "Z"),
+        ];
+        assert_eq!(rows, expected);
     }
 
     #[test]

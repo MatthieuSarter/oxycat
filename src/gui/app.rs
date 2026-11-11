@@ -321,7 +321,17 @@ impl eframe::App for OxycatApp {
             let s = self.fmt.s;
             ui.horizontal(|ui| {
                 ui.selectable_value(&mut self.tab, Tab::Search, s.tab_search);
-                ui.selectable_value(&mut self.tab, Tab::Folders, s.tab_folders);
+                let open = self.tab == Tab::Folders;
+                let icon = egui::IdSalt::new("folders_tab_icon");
+                let tab =
+                    egui::Button::selectable(open, (egui::Atom::custom(icon, egui::vec2(16.0, 14.0)), s.tab_folders))
+                        .atom_ui(ui);
+                if let Some(rect) = tab.rect(icon) {
+                    super::list::paint_folder(ui.painter(), rect, open);
+                }
+                if tab.clicked() {
+                    self.tab = Tab::Folders;
+                }
             });
             ui.separator();
             match self.tab {

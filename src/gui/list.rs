@@ -77,7 +77,8 @@ pub(super) struct TableOutput {
     pub action: Option<FileAction>,
 }
 
-/// Draws the table. `cell(row, col)` gives a cell's text; `is_dir(row)` and `medium(row)` drive the context menu.
+/// Draws the table. `cell(row, col)` gives a cell's text, the first column being the name, drawn after a folder or
+/// file icon; `is_dir(row)` picks that icon and, with `medium(row)`, drives the context menu.
 #[allow(clippy::too_many_arguments, reason = "plain drawing helper shared by two tabs")]
 pub(super) fn file_table(
     ui: &mut egui::Ui,
@@ -134,6 +135,9 @@ pub(super) fn file_table(
                 for (c, col) in cols.iter().enumerate() {
                     row.col(|ui| {
                         let text = cell(index, c);
+                        if c == 0 {
+                            entry_icon(ui, is_dir(index));
+                        }
                         if col.right {
                             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                                 ui.add(egui::Label::new(text).selectable(false))
@@ -186,4 +190,37 @@ pub(super) fn file_table(
             });
         });
     out
+}
+
+/// Folder or file icon in front of an entry name.
+fn entry_icon(ui: &mut egui::Ui, is_dir: bool) {
+    let (rect, _) = ui.allocate_exact_size(egui::vec2(16.0, 16.0), Sense::hover());
+    if is_dir {
+        paint_folder(ui.painter(), rect, false);
+    } else {
+        let color = ui.visuals().text_color();
+        let font = egui::TextStyle::Body.resolve(ui.style());
+        ui.painter().text(rect.center(), egui::Align2::CENTER_CENTER, "📄", font, color);
+    }
+}
+
+/// Folder icon colors, the classic manila yellow (readable on light and dark backgrounds): body, the
+/// darker back of an open folder, and the outline.
+const FOLDER_COLOR: egui::Color32 = egui::Color32::from_rgb(0xF2, 0xC2, 0x4E);
+const FOLDER_BACK: egui::Color32 = egui::Color32::from_rgb(0xC9, 0x93, 0x2A);
+const FOLDER_EDGE: egui::Color32 = egui::Color32::from_rgb(0x8A, 0x62, 0x14);
+
+/// Paints a small folder icon centered in `rect`, open (front flap tilted down) or closed.
+pub(super) fn paint_folder(painter: &egui::Painter, rect: egui::Rect, open: bool) {
+    let c = rect.center();
+    let p = |x: f32, y: f32| egui::pos2(c.x + x, c.y + y);
+    let edge = egui::Stroke::new(1.0, FOLDER_EDGE);
+    let tab = egui::Rect::from_min_max(p(-7.0, -6.0), p(-1.5, -3.5));
+    let body = egui::Rect::from_min_max(p(-7.0, -4.0), p(7.0, 5.5));
+    painter.rect(tab, 1.0, if open { FOLDER_BACK } else { FOLDER_COLOR }, edge, egui::StrokeKind::Middle);
+    painter.rect(body, 1.0, if open { FOLDER_BACK } else { FOLDER_COLOR }, edge, egui::StrokeKind::Middle);
+    if open {
+        let flap = vec![p(-4.5, -1.0), p(8.5, -1.0), p(6.5, 5.5), p(-7.0, 5.5)];
+        painter.add(egui::Shape::convex_polygon(flap, FOLDER_COLOR, edge));
+    }
 }

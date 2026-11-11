@@ -70,8 +70,9 @@ is reached. Click a column header to sort. **Double-click a result to open its f
 ## Browsing folders
 
 The Folders tab shows one folder of a catalog: click the breadcrumb or ⬆ (or press Backspace) to go up, double-click
-a folder to enter it, ◀ / ▶ (Ctrl+P / Ctrl+N) to show the previous / next catalog of the left list. The status bar
-tells whether the medium is plugged in, and where.
+a folder to enter it, or click it in the folder tree on the left (⏵ / ⏷ expand and collapse a branch), ◀ / ▶
+(Ctrl+P / Ctrl+N) to show the previous / next catalog of the left list. The status bar tells whether the medium is
+plugged in, and where.
 
 ## Actions on entries
 

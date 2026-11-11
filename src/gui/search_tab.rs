@@ -211,7 +211,7 @@ impl OxycatApp {
             |i, c| {
                 let hit = &hits[i];
                 match c {
-                    0 => format!("{} {}", if hit.entry.is_dir { "📁" } else { "📄" }, hit.entry.name),
+                    0 => hit.entry.name.clone(),
                     1 => hit.entry.size.map_or_else(|| "—".to_owned(), |b| fmt.size(b)),
                     2 => fmt.date(hit.entry.mtime),
                     3 => hit.path.clone(),
