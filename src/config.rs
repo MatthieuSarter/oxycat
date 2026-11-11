@@ -49,6 +49,8 @@ pub struct Settings {
     pub date_format: Option<String>,
     /// Thousands separator overriding the language's default.
     pub thousands_separator: Option<String>,
+    /// Whether the catalog panel is collapsed to the bare list.
+    pub catalogs_collapsed: bool,
 }
 
 impl Default for Settings {
@@ -60,6 +62,7 @@ impl Default for Settings {
             default_ignore: String::new(),
             date_format: None,
             thousands_separator: None,
+            catalogs_collapsed: false,
         }
     }
 }
@@ -159,6 +162,7 @@ mod tests {
             default_ignore: "*.tmp".to_owned(),
             date_format: Some("%Y".to_owned()),
             thousands_separator: Some(" ".to_owned()),
+            catalogs_collapsed: true,
         };
         save_settings(tmp.path(), &settings).unwrap();
         assert_eq!(load_settings(tmp.path()), (settings, None));

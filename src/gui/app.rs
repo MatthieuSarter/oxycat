@@ -93,7 +93,8 @@ pub struct OxycatApp {
     pub(super) checked: HashSet<PathBuf>,
     pub(super) selected: Option<PathBuf>,
     pub(super) filter: String,
-    pub(super) comment_draft: Option<(PathBuf, String)>,
+    /// Text fields of the details card being edited: catalog file, comment, ignore patterns.
+    pub(super) card_draft: Option<(PathBuf, String, String)>,
     pub(super) tab: Tab,
     pub(super) banner: Option<String>,
     pub(super) search: SearchTab,
@@ -127,7 +128,7 @@ impl OxycatApp {
             checked: HashSet::new(),
             selected: None,
             filter: String::new(),
-            comment_draft: None,
+            card_draft: None,
             tab: Tab::Search,
             banner,
             search: SearchTab::default(),
@@ -303,11 +304,19 @@ impl eframe::App for OxycatApp {
             Tab::Search => self.search_status(ui),
             Tab::Folders => self.folders_status(ui),
         });
-        egui::Panel::left("catalogs")
-            .resizable(true)
-            .default_size(260.0)
-            .min_size(200.0)
-            .show(ui, |ui| self.sidebar(ui));
+        if self.settings.catalogs_collapsed {
+            let width = self.compact_width(ui);
+            egui::Panel::left("catalogs_compact")
+                .resizable(false)
+                .exact_size(width)
+                .show(ui, |ui| self.sidebar_compact(ui));
+        } else {
+            egui::Panel::left("catalogs")
+                .resizable(true)
+                .default_size(260.0)
+                .min_size(200.0)
+                .show(ui, |ui| self.sidebar(ui));
+        }
         egui::CentralPanel::default().show(ui, |ui| {
             let s = self.fmt.s;
             ui.horizontal(|ui| {

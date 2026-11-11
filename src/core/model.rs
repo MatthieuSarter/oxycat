@@ -35,6 +35,8 @@ pub struct Volume {
     pub cataloged_at: i64,
     /// Version of Oxycat that made the catalog.
     pub oxycat_version: String,
+    /// Ignore patterns (Cathy syntax) used for this catalog, reused when it is refreshed.
+    pub ignore: String,
 }
 
 /// One file or folder of a catalog.

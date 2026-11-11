@@ -2,23 +2,68 @@
 
 use std::path::{Path, PathBuf};
 
-use super::app::{OxycatApp, Pending};
+use super::app::{OxycatApp, Pending, Tab};
 use super::folders_tab::FoldersTab;
 use crate::catalog::scan::ScanOptions;
 use crate::catalog::store::MetaUpdate;
-use crate::core::ignore::IgnoreRules;
 use crate::core::listing::filter_catalogs;
 use crate::i18n::fill;
 
 /// Height kept for the details card under the list.
-const CARD_HEIGHT: f32 = 250.0;
+const CARD_HEIGHT: f32 = 280.0;
+
+/// Room around the longest name in the compact panel: check box, spacing, label padding, panel margins, scroll bar.
+const COMPACT_EXTRA_WIDTH: f32 = 56.0;
 
 impl OxycatApp {
+    /// Width of the compact panel: just enough for the longest catalog name.
+    pub(super) fn compact_width(&self, ui: &egui::Ui) -> f32 {
+        let longest = self
+            .listing
+            .catalogs
+            .iter()
+            .map(|c| {
+                egui::WidgetText::from(c.volume.name.as_str())
+                    .into_galley(ui, Some(egui::TextWrapMode::Extend), f32::INFINITY, egui::TextStyle::Button)
+                    .size()
+                    .x
+            })
+            .fold(0.0, f32::max);
+        longest + COMPACT_EXTRA_WIDTH
+    }
+
+    /// Collapses or expands the catalog panel, remembering the choice.
+    fn toggle_panel(&mut self) {
+        self.settings.catalogs_collapsed = !self.settings.catalogs_collapsed;
+        self.save_settings();
+    }
+
+    /// The compact panel: an expand button and the catalog list, nothing else.
+    pub(super) fn sidebar_compact(&mut self, ui: &mut egui::Ui) {
+        if ui.small_button("▶").on_hover_text(self.fmt.s.expand_panel).clicked() {
+            self.toggle_panel();
+        }
+        egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
+            let shown: Vec<(PathBuf, String, bool)> = self
+                .listing
+                .catalogs
+                .iter()
+                .map(|c| (c.file.clone(), c.volume.name.clone(), c.volume.preserved))
+                .collect();
+            for (file, name, preserved) in &shown {
+                ui.horizontal(|ui| self.catalog_entry(ui, file, name, *preserved));
+            }
+        });
+    }
+
     pub(super) fn sidebar(&mut self, ui: &mut egui::Ui) {
         let s = self.fmt.s;
         ui.horizontal(|ui| {
             ui.heading(s.catalogs);
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                if ui.small_button("◀").on_hover_text(s.collapse_panel).clicked() {
+                    self.toggle_panel();
+                }
                 if ui.add_enabled(self.job.is_none(), egui::Button::new(s.add)).clicked() {
                     self.add = Some(super::add_dialog::AddDialog::empty(&self.settings));
                 }
@@ -62,6 +107,23 @@ impl OxycatApp {
     fn catalog_row(&mut self, ui: &mut egui::Ui, file: &PathBuf, name: &str, archive: bool, preserved: bool) {
         let s = self.fmt.s;
         ui.horizontal(|ui| {
+            self.catalog_entry(ui, file, name, preserved);
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                if preserved {
+                    ui.label("🔒").on_hover_text(s.preserved);
+                }
+                if archive {
+                    ui.small(s.badge_archive);
+                }
+            });
+        });
+    }
+
+    /// Check box and name of a catalog, with its click, double-click and context menu behavior.
+    fn catalog_entry(&mut self, ui: &mut egui::Ui, file: &PathBuf, name: &str, preserved: bool) {
+        let s = self.fmt.s;
+        ui.spacing_mut().item_spacing.x = 2.0;
+        {
             let mut checked = self.checked.contains(file);
             let response = ui.checkbox(&mut checked, "");
             response.widget_info(|| {
@@ -74,10 +136,17 @@ impl OxycatApp {
                     self.checked.remove(file);
                 }
             }
+            // The check box reserves a minimum interactive width: pull the name closer to it.
+            ui.add_space(-6.0);
             let selected = self.selected.as_ref() == Some(file);
             let response = ui.selectable_label(selected, name);
             if response.clicked() {
                 self.selected = Some(file.clone());
+                // In the Folders tab, picking another catalog browses it.
+                let browsed = self.folders.catalog.as_ref().map(|c| &c.file);
+                if self.tab == Tab::Folders && browsed != Some(file) {
+                    self.open_folder(file, None, None);
+                }
             }
             if response.double_clicked() {
                 self.open_folder(file, None, None);
@@ -100,15 +169,7 @@ impl OxycatApp {
                     ui.close();
                 }
             });
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if preserved {
-                    ui.label("🔒").on_hover_text(s.preserved);
-                }
-                if archive {
-                    ui.small(s.badge_archive);
-                }
-            });
-        });
+        }
     }
 
     fn details_card(&mut self, ui: &mut egui::Ui) {
@@ -118,18 +179,32 @@ impl OxycatApp {
         };
         let v = &info.volume;
         ui.strong(&v.name);
-        if self.comment_draft.as_ref().is_none_or(|(f, _)| *f != info.file) {
-            self.comment_draft = Some((info.file.clone(), v.comment.clone()));
+        if self.card_draft.as_ref().is_none_or(|(f, _, _)| *f != info.file) {
+            self.card_draft = Some((info.file.clone(), v.comment.clone(), v.ignore.clone()));
         }
-        let mut meta = MetaUpdate { comment: v.comment.clone(), archive: v.archive, preserved: v.preserved };
+        let mut meta = MetaUpdate {
+            comment: v.comment.clone(),
+            archive: v.archive,
+            preserved: v.preserved,
+            ignore: v.ignore.clone(),
+        };
         let mut save = false;
-        if let Some((_, draft)) = self.comment_draft.as_mut() {
+        if let Some((_, comment, ignore)) = self.card_draft.as_mut() {
             let response =
-                ui.add(egui::TextEdit::singleline(draft).hint_text(s.comment_hint).desired_width(f32::INFINITY));
-            if response.lost_focus() && *draft != v.comment {
-                meta.comment.clone_from(draft);
+                ui.add(egui::TextEdit::singleline(comment).hint_text(s.comment_hint).desired_width(f32::INFINITY));
+            if response.lost_focus() && *comment != v.comment {
+                meta.comment.clone_from(comment);
                 save = true;
             }
+            ui.horizontal(|ui| {
+                ui.weak(s.ignore);
+                let field = egui::TextEdit::singleline(ignore).hint_text(s.ignore_hint).desired_width(f32::INFINITY);
+                let response = ui.add(field).on_hover_text(s.ignore_next_refresh);
+                if response.lost_focus() && *ignore != v.ignore {
+                    ignore.trim().clone_into(&mut meta.ignore);
+                    save = true;
+                }
+            });
         }
         ui.horizontal(|ui| {
             save |= ui.checkbox(&mut meta.archive, s.archive).changed();
@@ -175,11 +250,8 @@ impl OxycatApp {
         };
         match self.locate(&info.volume) {
             Some(source) => {
-                let opts = ScanOptions {
-                    name: info.volume.name.clone(),
-                    ignore: IgnoreRules::parse(&self.settings.default_ignore),
-                    ..ScanOptions::default()
-                };
+                // The catalog's own ignore patterns are reused.
+                let opts = ScanOptions { name: info.volume.name.clone(), ..ScanOptions::default() };
                 self.start_scan(&source, opts);
             }
             None => self.banner = Some(fill(self.fmt.s.medium_not_found, &[("name", &info.volume.name)])),

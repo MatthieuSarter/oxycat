@@ -9,9 +9,11 @@ them while the media are unplugged. Settings and catalog location: see [configur
   about.
 - **Left panel**: the catalogs. Check the ones a search must cover (new catalogs start checked); filter the list by
   name or comment; *Check all* / *Uncheck all* apply to the filtered list. Click a catalog to see its card at the
-  bottom: comment (saved with Enter or when leaving the field), *Archive* and *Preserved* flags, disk usage, counts,
-  serial number, source and cataloging date. Double-click a catalog to browse it. Right-click: *Browse*, *Refresh*,
-  *Rename*, *Delete*.
+  bottom: comment and ignore patterns (saved with Enter or when leaving the field; the patterns apply at the next
+  refresh), *Archive* and *Preserved* flags, disk usage, counts, serial number, source and cataloging date.
+  Double-click a catalog to browse it; in the Folders tab a single click switches to it. Right-click: *Browse*,
+  *Refresh*, *Rename*, *Delete*. The ◀ button collapses the panel to the bare list of catalogs (as wide as the longest
+  name); ▶ expands it again.
 - **Search** and **Folders** tabs on the right, with a status bar at the bottom.
 
 ## Cataloging a medium
@@ -27,7 +29,7 @@ catalog untouched.
 - Using the name of a catalog made from **another medium or folder** asks before replacing it. A **preserved**
   catalog is never replaced nor refreshed.
 - **Refresh** (right-click on a catalog) re-scans the medium, found by its serial number even if it changed drive
-  letter; the name, comment and flags are kept.
+  letter; the name, comment, flags and ignore patterns are kept (the ignore patterns are stored in the catalog).
 - Nothing is ever written to the cataloged medium. Unreadable folders are skipped and counted.
 
 ## Searching
@@ -77,8 +79,9 @@ Select rows (Ctrl+click, Shift+click) and right-click:
 
 - **Open**, **Show in file manager**, **Properties** (Windows) work when the medium is plugged in — Oxycat finds it
   by serial number, whatever its drive letter.
-- **Copy** (also Ctrl+C) puts the rows as tab-separated text (name, size in bytes, date, path, volume) in the
-  clipboard, ready to paste into a spreadsheet.
+- **Copy** › *Name* (Ctrl+Shift+C), *Full path* (Ctrl+C), *Parent path*, or *Whole row* (tab-separated name, size in
+  bytes, date, path and volume, ready to paste into a spreadsheet), one line per selected entry. Paths are those of
+  the plugged-in medium, or where it was cataloged from when it is unplugged.
 - **Export folder tree** (on a folder) saves the list of its sub-folders, indented, to a `.txt` file.
 
 ## Command line
@@ -89,15 +92,16 @@ See the [README](../README.md#command-line) for `oxycat catalog`, to catalog med
 
 Each catalog is a standalone SQLite 3 database named `<name>.db` (characters invalid in file names are replaced by
 `_`). It uses the classic rollback journal (never WAL), so a catalog is always a single file you can copy, back up or
-open with any SQLite tool. `PRAGMA user_version` holds the schema version (currently `1`); Oxycat lists files with
-another version as invalid and never modifies them.
+open with any SQLite tool. `PRAGMA user_version` holds the schema version (currently `2`). Catalogs of version 1
+(no ignore patterns) are upgraded in place when listed; Oxycat lists files with any other version as invalid and never
+modifies them.
 
 ```sql
 CREATE TABLE volume (id INTEGER PRIMARY KEY CHECK (id = 1), name TEXT NOT NULL, comment TEXT NOT NULL DEFAULT '',
   archive INTEGER NOT NULL, preserved INTEGER NOT NULL, serial TEXT, label TEXT, filesystem TEXT,
   source_path TEXT NOT NULL, volume_root TEXT, total_bytes INTEGER, free_bytes INTEGER, file_count INTEGER NOT NULL,
   dir_count INTEGER NOT NULL, skipped_count INTEGER NOT NULL, cataloged_at INTEGER NOT NULL,
-  oxycat_version TEXT NOT NULL);
+  oxycat_version TEXT NOT NULL, ignore_patterns TEXT NOT NULL DEFAULT '');
 CREATE TABLE entries (id INTEGER PRIMARY KEY, parent_id INTEGER REFERENCES entries(id), name TEXT NOT NULL,
   name_fold TEXT NOT NULL, is_dir INTEGER NOT NULL, size INTEGER, mtime INTEGER);
 CREATE INDEX entries_parent ON entries(parent_id);
@@ -106,7 +110,7 @@ CREATE INDEX entries_parent ON entries(parent_id);
 - `volume` has exactly one row describing the medium: catalog name, comment, *Archive* and *Preserved* flags (0/1),
   serial number (Windows `XXXX-XXXX`, filesystem UUID on Linux), label, filesystem, cataloged path and the root of
   its volume, capacity and free space in bytes, counts of files, folders and unreadable (skipped) entries, the
-  cataloging time and the Oxycat version that made it.
+  cataloging time, the Oxycat version that made it, and the ignore patterns reused on refresh.
 - `entries` holds one row per file or folder. Top-level entries of the cataloged path have `parent_id` NULL;
   folders have `is_dir = 1` and `size` NULL; `name_fold` is the name lowercased without accents (used by searches);
   `mtime` is the last modification time.

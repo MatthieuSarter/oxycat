@@ -6,7 +6,6 @@ use clap::{Args as ClapArgs, Parser, Subcommand};
 
 use crate::catalog::scan::{ScanControl, ScanError, ScanOptions, catalog};
 use crate::catalog::store::CatalogDir;
-use crate::core::ignore::IgnoreRules;
 use crate::core::refresh::DecideError;
 use crate::i18n::{Lang, fill, strings};
 
@@ -46,7 +45,8 @@ pub struct CatalogArgs {
     /// Mark the catalog as not an archive.
     #[arg(long)]
     pub no_archive: bool,
-    /// Ignore patterns, e.g. "*.tmp; \Temp*" (default: `default_ignore` from `oxycat.toml`).
+    /// Ignore patterns, e.g. "*.tmp; \Temp*" (default: those stored in the catalog on refresh, else
+    /// `default_ignore` from `oxycat.toml`).
     #[arg(long)]
     pub ignore: Option<String>,
     /// Replace a catalog of the same name made from another medium or folder.
@@ -70,7 +70,7 @@ pub fn run_catalog(dir: &CatalogDir, args: &CatalogArgs, default_ignore: &str, l
             (_, true) => Some(false),
             _ => None,
         },
-        ignore: IgnoreRules::parse(args.ignore.as_deref().unwrap_or(default_ignore)),
+        ignore: args.ignore.clone().or_else(|| (!existed).then(|| default_ignore.to_owned())),
         overwrite: args.overwrite,
     };
     match catalog(dir, &args.path, &opts, &ScanControl::default()) {

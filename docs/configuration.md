@@ -24,6 +24,7 @@ defaults are used (the file is not overwritten until a setting is changed).
 | `default_ignore` | `""` | ignore patterns proposed when cataloging, e.g. `"*.tmp; \\Temp*"` (see the user guide) |
 | `date_format` | *(language default)* | [`chrono` format](https://docs.rs/chrono/latest/chrono/format/strftime/index.html), e.g. `"%Y-%m-%d %H:%M"` |
 | `thousands_separator` | *(language default)* | separator used between digit groups, e.g. `" "` |
+| `catalogs_collapsed` | `false` | catalog panel collapsed to the bare list |
 
 Language defaults: French and Spanish show dates as `%d/%m/%Y %H:%M`, English as `%Y-%m-%d %H:%M`; thousands are
 separated by a narrow space in French, `,` in English and `.` in Spanish.

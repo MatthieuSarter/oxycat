@@ -3,11 +3,11 @@
 use std::path::{MAIN_SEPARATOR, MAIN_SEPARATOR_STR, PathBuf};
 
 use super::app::{OxycatApp, Tab};
-use super::list::{Col, FileAction, Selection, file_table};
+use super::list::{Col, CopyWhat, FileAction, Selection, file_table};
 use crate::catalog::query::{ancestors, children, subtree_dirs};
 use crate::catalog::store::{CatalogInfo, open_read};
-use crate::core::listing::{SortKey, filter_catalogs, rows_to_tsv, selection_total, sort_entries, tree_text};
-use crate::core::locate::entry_path;
+use crate::core::listing::{NEWLINE, SortKey, filter_catalogs, rows_to_tsv, selection_total, sort_entries, tree_text};
+use crate::core::locate::{entry_path, join_stored};
 use crate::core::model::Entry;
 use crate::i18n::fill;
 use crate::platform;
@@ -216,17 +216,19 @@ impl OxycatApp {
         if ctx.egui_wants_keyboard_input() || self.add.is_some() || self.pending.is_some() {
             return;
         }
-        let (copy, back, next, prev) = ctx.input(|i| {
+        let (copy, copy_name, back, next, prev) = ctx.input(|i| {
             (
                 i.events.iter().any(|e| matches!(e, egui::Event::Copy)),
+                i.modifiers.command && i.modifiers.shift && i.key_pressed(egui::Key::C),
                 i.key_pressed(egui::Key::Backspace),
                 i.modifiers.command && i.key_pressed(egui::Key::N),
                 i.modifiers.command && i.key_pressed(egui::Key::P),
             )
         });
-        if copy {
+        if copy || copy_name {
             let targets = if self.tab == Tab::Search { self.search.targets() } else { self.folders.targets() };
-            self.file_action(FileAction::Copy, &targets);
+            let what = if copy_name { CopyWhat::Name } else { CopyWhat::FullPath };
+            self.copy(&targets, what);
         }
         if self.tab == Tab::Folders && self.folders.catalog.is_some() {
             if back && self.folders.dir.is_some() {
@@ -244,8 +246,8 @@ impl OxycatApp {
     pub(super) fn file_action(&mut self, action: FileAction, targets: &[Target]) {
         let s = self.fmt.s;
         let result = match action {
-            FileAction::Copy => {
-                self.copy_rows(targets);
+            FileAction::Copy(what) => {
+                self.copy(targets, what);
                 Ok(())
             }
             FileAction::ExportTree => targets.first().map_or(Ok(()), |t| self.export_tree(t)),
@@ -270,25 +272,42 @@ impl OxycatApp {
         }
     }
 
-    fn copy_rows(&self, targets: &[Target]) {
+    /// Copies the selected entries, one line each.
+    fn copy(&self, targets: &[Target], what: CopyWhat) {
         if targets.is_empty() {
             return;
         }
-        let s = self.fmt.s;
-        let rows: Vec<Vec<String>> = targets
-            .iter()
-            .map(|t| {
-                let catalog = self.catalog(&t.file).map(|c| c.volume.name.clone()).unwrap_or_default();
-                vec![
-                    t.entry.name.clone(),
-                    t.entry.size.map(|b| b.to_string()).unwrap_or_default(),
-                    self.fmt.date(t.entry.mtime),
-                    t.parent_path.clone(),
-                    catalog,
-                ]
-            })
-            .collect();
-        self.ctx.copy_text(rows_to_tsv(&[s.col_name, s.col_size, s.col_date, s.col_path, s.col_catalog], &rows));
+        let text = if what == CopyWhat::Row {
+            let rows: Vec<Vec<String>> = targets
+                .iter()
+                .map(|t| {
+                    let catalog = self.catalog(&t.file).map(|c| c.volume.name.clone()).unwrap_or_default();
+                    vec![
+                        t.entry.name.clone(),
+                        t.entry.size.map(|b| b.to_string()).unwrap_or_default(),
+                        self.fmt.date(t.entry.mtime),
+                        t.parent_path.clone(),
+                        catalog,
+                    ]
+                })
+                .collect();
+            rows_to_tsv(&rows)
+        } else {
+            let line = |t: &Target| {
+                if what == CopyWhat::Name {
+                    return t.entry.name.clone();
+                }
+                // Real location when the medium is plugged in, else where it was cataloged from.
+                let root = self
+                    .catalog(&t.file)
+                    .map(|c| self.locate(&c.volume).unwrap_or_else(|| PathBuf::from(&c.volume.source_path)));
+                let parent = join_stored(&root.unwrap_or_default(), &t.parent_path);
+                let path = if what == CopyWhat::FullPath { parent.join(&t.entry.name) } else { parent };
+                path.to_string_lossy().into_owned()
+            };
+            targets.iter().map(line).collect::<Vec<_>>().join(NEWLINE)
+        };
+        self.ctx.copy_text(text);
     }
 
     fn export_tree(&self, target: &Target) -> anyhow::Result<()> {

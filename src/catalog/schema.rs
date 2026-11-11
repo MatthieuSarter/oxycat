@@ -5,14 +5,14 @@ use rusqlite::{Connection, params};
 use crate::core::model::Volume;
 
 /// Value of `PRAGMA user_version` for the current schema.
-pub const SCHEMA_VERSION: i32 = 1;
+pub const SCHEMA_VERSION: i32 = 2;
 
 const SCHEMA_SQL: &str = "
 CREATE TABLE volume (id INTEGER PRIMARY KEY CHECK (id = 1), name TEXT NOT NULL, comment TEXT NOT NULL DEFAULT '',
   archive INTEGER NOT NULL, preserved INTEGER NOT NULL, serial TEXT, label TEXT, filesystem TEXT,
   source_path TEXT NOT NULL, volume_root TEXT, total_bytes INTEGER, free_bytes INTEGER, file_count INTEGER NOT NULL,
   dir_count INTEGER NOT NULL, skipped_count INTEGER NOT NULL, cataloged_at INTEGER NOT NULL,
-  oxycat_version TEXT NOT NULL);
+  oxycat_version TEXT NOT NULL, ignore_patterns TEXT NOT NULL DEFAULT '');
 CREATE TABLE entries (id INTEGER PRIMARY KEY, parent_id INTEGER REFERENCES entries(id), name TEXT NOT NULL,
   name_fold TEXT NOT NULL, is_dir INTEGER NOT NULL, size INTEGER, mtime INTEGER);
 CREATE INDEX entries_parent ON entries(parent_id);
@@ -28,6 +28,22 @@ pub fn create(conn: &Connection) -> rusqlite::Result<()> {
     conn.pragma_update(None, "user_version", SCHEMA_VERSION)
 }
 
+/// Brings a catalog of an older schema version up to date (version 1 had no ignore patterns). Other versions are
+/// left alone.
+///
+/// # Errors
+/// Any SQLite error.
+pub fn upgrade(conn: &Connection) -> rusqlite::Result<()> {
+    let version: i32 = conn.pragma_query_value(None, "user_version", |r| r.get(0))?;
+    if version == 1 {
+        conn.execute_batch(
+            "BEGIN; ALTER TABLE volume ADD COLUMN ignore_patterns TEXT NOT NULL DEFAULT ''; PRAGMA user_version = 2;
+             COMMIT;",
+        )?;
+    }
+    Ok(())
+}
+
 /// Reads the volume row.
 ///
 /// # Errors
@@ -35,7 +51,8 @@ pub fn create(conn: &Connection) -> rusqlite::Result<()> {
 pub fn read_volume(conn: &Connection) -> rusqlite::Result<Volume> {
     conn.query_row(
         "SELECT name, comment, archive, preserved, serial, label, filesystem, source_path, volume_root, total_bytes,
-           free_bytes, file_count, dir_count, skipped_count, cataloged_at, oxycat_version FROM volume WHERE id = 1",
+           free_bytes, file_count, dir_count, skipped_count, cataloged_at, oxycat_version, ignore_patterns
+         FROM volume WHERE id = 1",
         [],
         |r| {
             Ok(Volume {
@@ -55,6 +72,7 @@ pub fn read_volume(conn: &Connection) -> rusqlite::Result<Volume> {
                 skipped_count: r.get(13)?,
                 cataloged_at: r.get(14)?,
                 oxycat_version: r.get(15)?,
+                ignore: r.get(16)?,
             })
         },
     )
@@ -67,8 +85,9 @@ pub fn read_volume(conn: &Connection) -> rusqlite::Result<Volume> {
 pub fn write_volume(conn: &Connection, v: &Volume) -> rusqlite::Result<()> {
     conn.execute(
         "INSERT OR REPLACE INTO volume (id, name, comment, archive, preserved, serial, label, filesystem, source_path,
-           volume_root, total_bytes, free_bytes, file_count, dir_count, skipped_count, cataloged_at, oxycat_version)
-         VALUES (1, ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
+           volume_root, total_bytes, free_bytes, file_count, dir_count, skipped_count, cataloged_at, oxycat_version,
+           ignore_patterns)
+         VALUES (1, ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)",
         params![
             v.name,
             v.comment,
@@ -86,6 +105,7 @@ pub fn write_volume(conn: &Connection, v: &Volume) -> rusqlite::Result<()> {
             v.skipped_count,
             v.cataloged_at,
             v.oxycat_version,
+            v.ignore,
         ],
     )
     .map(|_| ())

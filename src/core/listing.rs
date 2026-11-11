@@ -78,17 +78,12 @@ pub fn selection_total(sizes: impl Iterator<Item = Option<u64>>) -> (usize, u64)
     sizes.fold((0, 0), |(n, total), size| (n + 1, total + size.unwrap_or(0)))
 }
 
-/// Tab-separated text with a header row, ready to paste into a spreadsheet. Tabs and line breaks inside cells become
+/// Tab-separated rows, one per line, ready to paste into a spreadsheet. Tabs and line breaks inside cells become
 /// spaces.
 #[must_use]
-pub fn rows_to_tsv(header: &[&str], rows: &[Vec<String>]) -> String {
+pub fn rows_to_tsv(rows: &[Vec<String>]) -> String {
     let clean = |cell: &str| cell.replace(['\t', '\r', '\n'], " ");
-    let mut out = header.join("\t") + NEWLINE;
-    for row in rows {
-        out += &row.iter().map(|c| clean(c)).collect::<Vec<_>>().join("\t");
-        out += NEWLINE;
-    }
-    out
+    rows.iter().map(|row| row.iter().map(|c| clean(c)).collect::<Vec<_>>().join("\t")).collect::<Vec<_>>().join(NEWLINE)
 }
 
 /// Text tree of folders: the root on the first line, then one folder per line indented by two spaces per level.
@@ -209,10 +204,7 @@ mod tests {
     #[test]
     fn tsv_rows() {
         let rows = vec![vec!["a\tb".to_owned(), "1".to_owned()], vec!["line\nbreak".to_owned(), "2".to_owned()]];
-        assert_eq!(
-            rows_to_tsv(&["Name", "Size"], &rows),
-            format!("Name\tSize{NEWLINE}a b\t1{NEWLINE}line break\t2{NEWLINE}")
-        );
+        assert_eq!(rows_to_tsv(&rows), format!("a b\t1{NEWLINE}line break\t2"));
     }
 
     #[test]

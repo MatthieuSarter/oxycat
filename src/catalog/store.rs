@@ -9,7 +9,7 @@ use std::time::SystemTime;
 use anyhow::{Context, bail};
 use rusqlite::{Connection, OpenFlags};
 
-use super::schema::{SCHEMA_VERSION, read_volume};
+use super::schema::{SCHEMA_VERSION, read_volume, upgrade};
 use crate::core::model::Volume;
 use crate::core::names::catalog_file_stem;
 
@@ -48,6 +48,8 @@ pub struct MetaUpdate {
     pub archive: bool,
     /// Preserved flag.
     pub preserved: bool,
+    /// Ignore patterns applied at the next refresh.
+    pub ignore: String,
 }
 
 /// Why [`CatalogDir::replace`] failed. In every case the previous catalog is left untouched.
@@ -115,6 +117,8 @@ impl CatalogDir {
             if !is_db {
                 continue;
             }
+            // Older Oxycat catalogs are upgraded in place; a failure shows up as an invalid file below.
+            let _ = Connection::open_with_flags(&path, OpenFlags::SQLITE_OPEN_READ_WRITE).map(|c| upgrade(&c));
             let info = open_read(&path).and_then(|conn| {
                 let volume = read_volume(&conn)?;
                 let modified = std::fs::metadata(&path)?.modified()?;
@@ -148,15 +152,15 @@ impl CatalogDir {
         self.list().catalogs.into_iter().find(|c| stem_key(&c.file) == key)
     }
 
-    /// Updates the comment and flags of a catalog.
+    /// Updates the comment, flags and ignore patterns of a catalog.
     ///
     /// # Errors
     /// When the file cannot be opened for writing or updated.
     pub fn update_meta(&self, file: &Path, meta: &MetaUpdate) -> anyhow::Result<()> {
         let conn = open_write(file)?;
         conn.execute(
-            "UPDATE volume SET comment = ?1, archive = ?2, preserved = ?3 WHERE id = 1",
-            rusqlite::params![meta.comment, meta.archive, meta.preserved],
+            "UPDATE volume SET comment = ?1, archive = ?2, preserved = ?3, ignore_patterns = ?4 WHERE id = 1",
+            rusqlite::params![meta.comment, meta.archive, meta.preserved, meta.ignore],
         )?;
         Ok(())
     }
@@ -244,6 +248,7 @@ pub(crate) mod tests {
             skipped_count: 0,
             cataloged_at: 1_791_000_000,
             oxycat_version: "0.1.0".to_owned(),
+            ignore: String::new(),
         }
     }
 
@@ -286,10 +291,24 @@ pub(crate) mod tests {
     #[test]
     fn update_meta_persists() {
         let (_tmp, dir) = dir_with(&["B1"]);
-        let meta = MetaUpdate { comment: "BD".to_owned(), archive: true, preserved: true };
+        let meta = MetaUpdate { comment: "BD".to_owned(), archive: true, preserved: true, ignore: "*.tmp".to_owned() };
         dir.update_meta(&dir.path_for("B1"), &meta).unwrap();
         let v = dir.find("B1").unwrap().volume;
-        assert_eq!((v.comment.as_str(), v.archive, v.preserved), ("BD", true, true));
+        assert_eq!((v.comment.as_str(), v.archive, v.preserved, v.ignore.as_str()), ("BD", true, true, "*.tmp"));
+    }
+
+    #[test]
+    fn version_1_catalog_upgraded_on_listing() {
+        let (_tmp, dir) = dir_with(&["Old"]);
+        let file = dir.path_for("Old");
+        let conn = Connection::open(&file).unwrap();
+        conn.execute_batch("ALTER TABLE volume DROP COLUMN ignore_patterns; PRAGMA user_version = 1;").unwrap();
+        drop(conn);
+        let listing = dir.list();
+        assert!(listing.invalid.is_empty(), "{:?}", listing.invalid);
+        assert_eq!(listing.catalogs[0].volume.ignore, "");
+        let version: i32 = open_read(&file).unwrap().pragma_query_value(None, "user_version", |r| r.get(0)).unwrap();
+        assert_eq!(version, crate::catalog::schema::SCHEMA_VERSION);
     }
 
     #[test]
@@ -340,7 +359,10 @@ pub(crate) mod tests {
         Connection::open(root.join("foreign.db")).unwrap().execute_batch("CREATE TABLE t (x);").unwrap();
         let newer = root.join("newer.db");
         make_catalog(&newer, &sample_volume("newer"));
-        Connection::open(&newer).unwrap().pragma_update(None, "user_version", 2).unwrap();
+        Connection::open(&newer)
+            .unwrap()
+            .pragma_update(None, "user_version", crate::catalog::schema::SCHEMA_VERSION + 1)
+            .unwrap();
         std::fs::write(root.join("left.db.tmp"), b"partial").unwrap();
         let files = ["empty.db", "foreign.db", "newer.db", "left.db.tmp"];
         let before: Vec<Vec<u8>> = files.iter().map(|f| std::fs::read(root.join(f)).unwrap()).collect();

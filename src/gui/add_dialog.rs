@@ -10,7 +10,6 @@ use crate::catalog::scan::{ScanControl, ScanError, ScanOptions, catalog};
 use crate::catalog::store::CatalogInfo;
 use crate::cli::scan_error_message;
 use crate::config::Settings;
-use crate::core::ignore::IgnoreRules;
 use crate::core::locate::source_rel;
 use crate::core::refresh::{DecideError, decide};
 use crate::i18n::fill;
@@ -49,7 +48,7 @@ impl AddDialog {
             name: self.name.trim().to_owned(),
             comment: Some(self.comment.clone()),
             archive: Some(self.archive),
-            ignore: IgnoreRules::parse(&self.ignore),
+            ignore: Some(self.ignore.trim().to_owned()),
             overwrite,
         }
     }
@@ -114,7 +113,7 @@ impl OxycatApp {
                 self.reload();
                 self.checked.insert(info.file.clone());
                 self.selected = Some(info.file.clone());
-                self.comment_draft = None;
+                self.card_draft = None;
                 let (files, dirs) = (self.fmt.int(info.volume.file_count), self.fmt.int(info.volume.dir_count));
                 fill(s.cli_created, &[("name", &info.volume.name), ("files", &files), ("dirs", &dirs)])
             }

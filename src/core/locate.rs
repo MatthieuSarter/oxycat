@@ -42,7 +42,8 @@ fn strip_prefix_ignore_case<'a>(text: &'a str, prefix: &str) -> Option<&'a str> 
 }
 
 /// Appends the components of a stored path (either separator) to `base`.
-fn join_stored(base: &Path, stored: &str) -> PathBuf {
+#[must_use]
+pub fn join_stored(base: &Path, stored: &str) -> PathBuf {
     stored.split(['\\', '/']).filter(|c| !c.is_empty()).fold(base.to_path_buf(), |path, c| path.join(c))
 }
 

@@ -30,7 +30,8 @@ a scheduled task:
 oxycat catalog E:\ --name B1 --comment "Blue USB disk" --archive --ignore "*.tmp; \Temp*"
 ```
 
-- Running it again on the same medium and folder refreshes the catalog (comment and flags are kept unless given).
+- Running it again on the same medium and folder refreshes the catalog (comment, flags and ignore patterns are kept
+  unless given).
 - A name already used by another medium or folder is refused unless `--overwrite` is given; a *preserved* catalog is
   never overwritten.
 - `--catalogs <dir>` (or the `OXYCAT_CATALOGS` variable) selects the catalog directory.

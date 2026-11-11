@@ -85,3 +85,62 @@ fn language_and_theme_are_saved() {
     assert_eq!(saved.theme, crate::config::ThemeChoice::Dark);
     assert_eq!(saved.language, Some(Lang::En));
 }
+
+/// Text the interface put in the clipboard during the last frame.
+fn copied(harness: &Harness<'static, OxycatApp>) -> Option<String> {
+    harness.output().platform_output.commands.iter().find_map(|c| match c {
+        egui::OutputCommand::CopyText(text) => Some(text.clone()),
+        _ => None,
+    })
+}
+
+#[test]
+fn keyboard_copy_of_path_and_name() {
+    let (tmp, info) = catalog_of("B1", &[("BD/Tintin.cbz", Some(4))]);
+    let mut harness = harness(CatalogDir::new(tmp.path().to_path_buf()));
+    harness.run_steps(2);
+    let conn = crate::catalog::store::open_read(&info.file).unwrap();
+    let bd = crate::catalog::query::children(&conn, None).unwrap().remove(0);
+    let tintin = crate::catalog::query::children(&conn, Some(bd.id)).unwrap().remove(0);
+    drop(conn);
+    harness.state_mut().open_folder(&info.file, Some(bd.id), Some(tintin.id));
+    harness.run_steps(2);
+
+    harness.event(egui::Event::Copy);
+    harness.step();
+    let expected = std::path::Path::new(&info.volume.source_path).join("BD").join("Tintin.cbz");
+    assert_eq!(copied(&harness), Some(expected.to_string_lossy().into_owned()));
+
+    let modifiers = egui::Modifiers::COMMAND | egui::Modifiers::SHIFT;
+    let press = egui::Event::Key { key: egui::Key::C, physical_key: None, pressed: true, repeat: false, modifiers };
+    harness.event(egui::Event::ModifiersChanged(modifiers));
+    harness.event(press);
+    harness.step();
+    assert_eq!(copied(&harness).as_deref(), Some("Tintin.cbz"));
+}
+
+#[test]
+fn folders_tab_follows_catalog_clicks_and_panel_collapses() {
+    let (tmp, a) = catalog_of("Alpha", &[("a.txt", Some(1))]);
+    let (tmp_b, b) = catalog_of("Beta", &[("b.txt", Some(1))]);
+    std::fs::copy(&b.file, tmp.path().join("Beta.db")).unwrap();
+    drop(tmp_b);
+    let mut harness = harness(CatalogDir::new(tmp.path().to_path_buf()));
+    harness.run_steps(2);
+    harness.state_mut().open_folder(&a.file, None, None);
+    harness.run_steps(2);
+
+    harness.get_by_label("Beta").click();
+    harness.run_steps(2);
+    let browsed = harness.state().folders.catalog.as_ref().map(|c| c.volume.name.clone());
+    assert_eq!(browsed.as_deref(), Some("Beta"));
+
+    harness.get_all_by_label("◀").next().unwrap().click();
+    harness.run_steps(2);
+    assert!(harness.state().settings.catalogs_collapsed);
+    assert!(harness.query_by_label("Catalogs").is_none());
+    assert!(harness.query_by_label("Alpha").is_some());
+    harness.get_all_by_label("▶").next().unwrap().click();
+    harness.run_steps(2);
+    assert!(harness.query_by_label("Catalogs").is_some());
+}

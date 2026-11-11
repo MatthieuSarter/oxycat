@@ -48,8 +48,17 @@ pub(super) enum FileAction {
     Open,
     Reveal,
     Properties,
-    Copy,
+    Copy(CopyWhat),
     ExportTree,
+}
+
+/// What "Copy" puts in the clipboard, one line per selected entry.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum CopyWhat {
+    Name,
+    FullPath,
+    ParentPath,
+    Row,
 }
 
 /// A column of the table.
@@ -160,7 +169,16 @@ pub(super) fn file_table(
                         item(ui, s.properties, FileAction::Properties, available);
                     }
                     ui.separator();
-                    item(ui, s.copy, FileAction::Copy, true);
+                    ui.menu_button(s.copy, |ui| {
+                        for (label, what) in [
+                            (s.copy_name, CopyWhat::Name),
+                            (s.copy_full_path, CopyWhat::FullPath),
+                            (s.copy_parent_path, CopyWhat::ParentPath),
+                            (s.copy_row, CopyWhat::Row),
+                        ] {
+                            item(ui, label, FileAction::Copy(what), true);
+                        }
+                    });
                     if is_dir(index) {
                         item(ui, s.export_tree, FileAction::ExportTree, true);
                     }

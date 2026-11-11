@@ -72,7 +72,11 @@ fn preserved_refused() {
     oxycat(&["catalog", &d.src, "--name", "T", "--catalogs", &d.cats], None);
     let dir = CatalogDir::new(d.cats.clone().into());
     let file = dir.find("T").unwrap().file;
-    dir.update_meta(&file, &MetaUpdate { comment: String::new(), archive: false, preserved: true }).unwrap();
+    dir.update_meta(
+        &file,
+        &MetaUpdate { comment: String::new(), archive: false, preserved: true, ignore: String::new() },
+    )
+    .unwrap();
     let out = oxycat(&["catalog", &d.src, "--name", "T", "--overwrite", "--catalogs", &d.cats], None);
     assert_eq!(out.status.code(), Some(1));
 }
@@ -106,7 +110,10 @@ fn archive_flag_and_ignore() {
     let d = dirs();
     let args = ["catalog", &d.src, "--name", "T", "--archive", "--ignore", "*.cbz", "--catalogs", &d.cats];
     assert_eq!(oxycat(&args, None).status.code(), Some(0));
-    let info = CatalogDir::new(d.cats.into()).find("T").unwrap();
+    let info = CatalogDir::new(d.cats.clone().into()).find("T").unwrap();
     assert!(info.volume.archive);
     assert_eq!(info.volume.file_count, 0);
+    // A refresh without --ignore reuses the patterns stored in the catalog.
+    assert_eq!(oxycat(&["catalog", &d.src, "--name", "T", "--catalogs", &d.cats], None).status.code(), Some(0));
+    assert_eq!(CatalogDir::new(d.cats.into()).find("T").unwrap().volume.file_count, 0);
 }

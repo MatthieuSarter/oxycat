@@ -30,8 +30,9 @@ pub struct ScanOptions {
     pub comment: Option<String>,
     /// Archive flag; `None` keeps the existing one on refresh, else follows removable media.
     pub archive: Option<bool>,
-    /// Entries left out of the catalog.
-    pub ignore: IgnoreRules,
+    /// Ignore patterns (Cathy syntax); `None` keeps the existing ones on refresh, none otherwise. They are stored
+    /// in the catalog.
+    pub ignore: Option<String>,
     /// Allow replacing a catalog of another medium or source with the same name.
     pub overwrite: bool,
 }
@@ -88,8 +89,10 @@ pub fn catalog(
     let decision =
         decide(existing.as_ref(), info.serial.as_deref(), &rel, opts.overwrite).map_err(ScanError::Decide)?;
 
+    let kept = existing.filter(|_| decision == WriteDecision::Refresh);
+    let ignore = opts.ignore.clone().or_else(|| kept.as_ref().map(|k| k.ignore.clone())).unwrap_or_default();
     let tmp = dir.temp_path_for(&opts.name);
-    let built = build(&tmp, &source, &opts.ignore, ctl);
+    let built = build(&tmp, &source, &IgnoreRules::parse(&ignore), ctl);
     let counts = match built {
         Ok(counts) => counts,
         Err(e) => {
@@ -97,7 +100,6 @@ pub fn catalog(
             return Err(e);
         }
     };
-    let kept = existing.filter(|_| decision == WriteDecision::Refresh);
     let volume = Volume {
         name: kept.as_ref().map_or_else(|| opts.name.clone(), |k| k.name.clone()),
         comment: opts.comment.clone().or_else(|| kept.as_ref().map(|k| k.comment.clone())).unwrap_or_default(),
@@ -115,6 +117,7 @@ pub fn catalog(
         skipped_count: counts.skipped,
         cataloged_at: unix_seconds(SystemTime::now()).unwrap_or_default(),
         oxycat_version: env!("CARGO_PKG_VERSION").to_owned(),
+        ignore,
     };
     let finish = Connection::open(&tmp).and_then(|conn| schema::write_volume(&conn, &volume));
     if let Err(e) = finish {
@@ -226,7 +229,6 @@ mod tests {
 
     use super::{ScanControl, ScanError, ScanOptions, catalog};
     use crate::catalog::store::{CatalogDir, MetaUpdate, open_read};
-    use crate::core::ignore::IgnoreRules;
     use crate::core::refresh::DecideError;
 
     struct Fixture {
@@ -283,17 +285,29 @@ mod tests {
     #[test]
     fn ignore_rules_applied() {
         let f = fixture();
-        let o = ScanOptions { ignore: IgnoreRules::parse("*.tmp;\\Temp*"), ..opts("T") };
+        let o = ScanOptions { ignore: Some(r"*.tmp;\Temp*".to_owned()), ..opts("T") };
         let info = catalog(&f.dir, &f.src, &o, &ScanControl::default()).unwrap();
         let all = names(&info.file);
         assert!(all.iter().all(|(n, _, _)| n != "x.tmp" && n != "temp" && n != "a.txt"), "{all:?}");
+        assert_eq!(info.volume.ignore, r"*.tmp;\Temp*");
+    }
+
+    #[test]
+    fn refresh_reuses_stored_ignore_patterns() {
+        let f = fixture();
+        let o = ScanOptions { ignore: Some("*.tmp".to_owned()), ..opts("T") };
+        let first = catalog(&f.dir, &f.src, &o, &ScanControl::default()).unwrap();
+        let refreshed = catalog(&f.dir, &f.src, &opts("T"), &ScanControl::default()).unwrap();
+        assert_eq!(refreshed.volume.ignore, "*.tmp");
+        assert_eq!(refreshed.volume.file_count, first.volume.file_count);
+        assert!(names(&refreshed.file).iter().all(|(n, _, _)| n != "x.tmp"));
     }
 
     #[test]
     fn rescan_same_source_is_refresh_and_keeps_comment() {
         let f = fixture();
         let first = catalog(&f.dir, &f.src, &opts("T"), &ScanControl::default()).unwrap();
-        let meta = MetaUpdate { comment: "BD".to_owned(), archive: true, preserved: false };
+        let meta = MetaUpdate { comment: "BD".to_owned(), archive: true, preserved: false, ignore: String::new() };
         f.dir.update_meta(&first.file, &meta).unwrap();
         std::fs::write(f.src.join("new.txt"), b"n").unwrap();
         let second = catalog(&f.dir, &f.src, &opts("t"), &ScanControl::default()).unwrap();
@@ -319,7 +333,7 @@ mod tests {
     fn preserved_refused_nothing_written() {
         let f = fixture();
         let first = catalog(&f.dir, &f.src, &opts("T"), &ScanControl::default()).unwrap();
-        let meta = MetaUpdate { comment: String::new(), archive: false, preserved: true };
+        let meta = MetaUpdate { comment: String::new(), archive: false, preserved: true, ignore: String::new() };
         f.dir.update_meta(&first.file, &meta).unwrap();
         let before = std::fs::read(&first.file).unwrap();
         let result = catalog(&f.dir, &f.src, &ScanOptions { overwrite: true, ..opts("T") }, &ScanControl::default());
@@ -387,7 +401,7 @@ mod tests {
     #[test]
     fn ignore_rules_do_not_apply_to_the_source_itself() {
         let f = fixture();
-        let o = ScanOptions { ignore: IgnoreRules::parse(r"\Temp*"), ..opts("T") };
+        let o = ScanOptions { ignore: Some(r"\Temp*".to_owned()), ..opts("T") };
         let info = catalog(&f.dir, &f.src.join("Temp"), &o, &ScanControl::default()).unwrap();
         assert_eq!(info.volume.file_count, 1);
     }
