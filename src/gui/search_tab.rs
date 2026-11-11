@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::mpsc::{Receiver, channel};
+use std::sync::mpsc::{Receiver, TryRecvError, channel};
 use std::time::Duration;
 
 use chrono::Local;
@@ -55,9 +55,20 @@ impl Default for SearchTab {
 
 impl SearchTab {
     /// Picks up the result of the running search, if it is done.
-    pub fn poll(&mut self) {
-        let Some(result) = self.running.as_ref().and_then(|rx| rx.try_recv().ok()) else {
-            return;
+    ///
+    /// # Errors
+    /// When the search thread stopped without a result (it panicked): the search is over, with no hits.
+    pub fn poll(&mut self) -> Result<(), &'static str> {
+        let Some(rx) = &self.running else {
+            return Ok(());
+        };
+        let result = match rx.try_recv() {
+            Ok(result) => result,
+            Err(TryRecvError::Empty) => return Ok(()),
+            Err(TryRecvError::Disconnected) => {
+                self.running = None;
+                return Err("search thread stopped");
+            }
         };
         self.running = None;
         self.hits = result.hits;
@@ -66,6 +77,7 @@ impl SearchTab {
         self.errors = result.errors;
         self.elapsed = Some(result.elapsed);
         self.selection.clear();
+        Ok(())
     }
 
     /// The selected hits, as file-action targets.
@@ -262,7 +274,10 @@ impl OxycatApp {
             ctx.request_repaint();
         });
         // A newer search replaces the receiver: results of an older one are simply dropped.
-        self.search.running = spawned.ok().map(|_| rx);
+        match spawned {
+            Ok(_) => self.search.running = Some(rx),
+            Err(e) => self.banner = Some(fill(self.fmt.s.err_other, &[("error", &e.to_string())])),
+        }
     }
 
     pub(super) fn search_status(&mut self, ui: &mut egui::Ui) {
@@ -293,5 +308,27 @@ impl OxycatApp {
             }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| ui.weak(s.double_click_hint));
         });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::mpsc::channel;
+
+    use crate::catalog::store::CatalogDir;
+    use crate::gui::tests::harness;
+
+    #[test]
+    fn lost_search_thread_ends_the_search() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut harness = harness(CatalogDir::new(tmp.path().to_path_buf()));
+        // The search thread died (it panicked) before sending its result.
+        let (tx, rx) = channel();
+        drop(tx);
+        harness.state_mut().search.running = Some(rx);
+        harness.run_steps(2);
+        assert!(harness.state().search.running.is_none());
+        let banner = harness.state().banner.clone().unwrap_or_default();
+        assert!(banner.contains("search thread stopped"), "{banner:?}");
     }
 }

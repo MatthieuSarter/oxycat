@@ -113,7 +113,14 @@ impl OxycatApp {
     pub(super) fn new(ctx: &egui::Context, dir: CatalogDir, settings: Settings, warning: Option<String>) -> OxycatApp {
         let lang = settings.language.unwrap_or_else(|| detect(sys_locale::get_locale().as_deref()));
         let fmt = Fmt::new(lang, &settings);
-        let banner = warning.map(|w| fill(fmt.s.settings_invalid, &[("warning", &w)]));
+        // A catalog directory that cannot be created (e.g. read-only location) is reported now rather than as an
+        // obscure failure at the first scan or settings change.
+        let dir_error = std::fs::create_dir_all(dir.root())
+            .err()
+            .map(|e| fill(fmt.s.err_catalog_dir, &[("dir", &dir.root().to_string_lossy()), ("error", &e.to_string())]));
+        let warning = warning.map(|w| fill(fmt.s.settings_invalid, &[("warning", &w)]));
+        let banner =
+            Some([dir_error, warning].into_iter().flatten().collect::<Vec<_>>().join("\n")).filter(|b| !b.is_empty());
         let mounted: Mounted = Arc::default();
         let mut app = OxycatApp {
             dir,
@@ -294,7 +301,9 @@ impl eframe::App for OxycatApp {
         let ctx = ui.ctx().clone();
         self.poll_catalogs();
         self.poll_job();
-        self.search.poll();
+        if let Err(e) = self.search.poll() {
+            self.banner = Some(fill(self.fmt.s.err_other, &[("error", e)]));
+        }
         self.handle_drop(&ctx);
         self.handle_keys(&ctx);
 

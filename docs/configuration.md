@@ -11,6 +11,12 @@ chosen in this order:
 
 Nothing is written to the registry or to the user profile: copying the directory copies everything.
 
+The directory also receives `oxycat-crash.log` when Oxycat crashes: one line per crash (UTC time, version, thread and
+panic message), since the Windows executable has no console to print it to. Include it when reporting a bug.
+
+**Back it up.** A catalog can be rebuilt by cataloging the medium again, but not once the medium is gone — which is
+precisely the case of archived and preserved catalogs. Include the catalog directory in your regular backups.
+
 ## `oxycat.toml`
 
 Every key is optional; a missing file means all defaults. An invalid file is reported in the interface and the

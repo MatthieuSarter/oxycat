@@ -4,6 +4,7 @@ pub mod catalog;
 pub mod cli;
 pub mod config;
 pub mod core;
+pub mod crash;
 pub mod gui;
 pub mod i18n;
 pub mod platform;

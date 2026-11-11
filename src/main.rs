@@ -30,6 +30,9 @@ fn main() -> ExitCode {
     let exe_dir = std::env::current_exe().ok().and_then(|p| p.parent().map(Path::to_path_buf));
     let dir =
         resolve_catalog_dir(args.catalogs, std::env::var_os(CATALOGS_ENV), &exe_dir.unwrap_or(PathBuf::from(".")));
+    // The window-subsystem executable, or a scheduled `catalog` run, has no console to print a panic to: keep a trace
+    // next to the catalogs.
+    oxycat::crash::install(dir.join(oxycat::crash::LOG_FILE));
     let (settings, warning) = load_settings(&dir);
     let lang = settings.language.unwrap_or_else(|| detect(sys_locale::get_locale().as_deref()));
     match args.command {
@@ -48,15 +51,12 @@ fn main() -> ExitCode {
                 }
             }
         }
-        None => {
-            let _ = std::fs::create_dir_all(&dir);
-            match oxycat::gui::run(CatalogDir::new(dir), settings, warning) {
-                Ok(()) => ExitCode::SUCCESS,
-                Err(e) => {
-                    eprintln!("{e}");
-                    ExitCode::FAILURE
-                }
+        None => match oxycat::gui::run(CatalogDir::new(dir), settings, warning) {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(e) => {
+                eprintln!("{e}");
+                ExitCode::FAILURE
             }
-        }
+        },
     }
 }

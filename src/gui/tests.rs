@@ -12,7 +12,7 @@ use crate::catalog::store::CatalogDir;
 use crate::config::Settings;
 use crate::i18n::Lang;
 
-fn harness(dir: CatalogDir) -> Harness<'static, OxycatApp> {
+pub(super) fn harness(dir: CatalogDir) -> Harness<'static, OxycatApp> {
     let settings = Settings { language: Some(Lang::En), ..Settings::default() };
     Harness::builder()
         .with_size([1200.0, 800.0])
@@ -21,7 +21,7 @@ fn harness(dir: CatalogDir) -> Harness<'static, OxycatApp> {
 }
 
 /// Steps the interface until `done` holds (background threads deliver results asynchronously).
-fn step_until(harness: &mut Harness<'static, OxycatApp>, done: impl Fn(&OxycatApp) -> bool) {
+pub(super) fn step_until(harness: &mut Harness<'static, OxycatApp>, done: impl Fn(&OxycatApp) -> bool) {
     let deadline = Instant::now() + Duration::from_secs(10);
     while !done(harness.state()) {
         assert!(Instant::now() < deadline, "timed out");
@@ -70,7 +70,7 @@ fn search_then_open_folder() {
 }
 
 /// Whether some widget displays exactly `text`.
-fn shows(harness: &Harness<'static, OxycatApp>, text: &str) -> bool {
+pub(super) fn shows(harness: &Harness<'static, OxycatApp>, text: &str) -> bool {
     harness.query_all_by(|n| n.value().is_some_and(|v| v == text)).next().is_some()
 }
 
@@ -206,6 +206,16 @@ fn double_click_on_missing_file_explains() {
     harness.run_steps(2);
     let banner = harness.state().banner.clone().unwrap_or_default();
     assert!(banner.contains("Not found on the plugged-in medium"), "{banner:?}");
+}
+
+#[test]
+fn unusable_catalog_dir_is_reported_at_startup() {
+    let tmp = tempfile::tempdir().unwrap();
+    let blocker = tmp.path().join("file");
+    std::fs::write(&blocker, b"not a directory").unwrap();
+    let harness = harness(CatalogDir::new(blocker.join("catalogs")));
+    let banner = harness.state().banner.clone().unwrap_or_default();
+    assert!(banner.contains("Cannot create the catalog directory"), "{banner:?}");
 }
 
 #[test]

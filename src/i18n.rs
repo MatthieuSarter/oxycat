@@ -102,6 +102,8 @@ pub struct Strings {
     pub err_other: &'static str,
     /// Invalid settings file. Placeholder: `{warning}`.
     pub settings_invalid: &'static str,
+    /// Error: the catalog directory cannot be created. Placeholders: `{dir}`, `{error}`.
+    pub err_catalog_dir: &'static str,
 
     // Top bar.
     pub theme_light: &'static str,
@@ -258,6 +260,7 @@ pub static FR: Strings = Strings {
     err_in_use: "Le catalogue « {name} » est utilisé par un autre programme ; le catalogue précédent est inchangé.",
     err_other: "Erreur : {error}",
     settings_invalid: "Réglages ignorés (fichier invalide) : {warning}",
+    err_catalog_dir: "Impossible de créer le dossier des catalogues « {dir} » : {error}",
     theme_light: "☀ Clair",
     theme_dark: "🌙 Sombre",
     theme_auto: "Auto",
@@ -387,6 +390,7 @@ pub static EN: Strings = Strings {
     err_in_use: "Catalog \"{name}\" is in use by another program; the previous catalog is unchanged.",
     err_other: "Error: {error}",
     settings_invalid: "Settings ignored (invalid file): {warning}",
+    err_catalog_dir: "Cannot create the catalog directory \"{dir}\": {error}",
     theme_light: "☀ Light",
     theme_dark: "🌙 Dark",
     theme_auto: "Auto",
@@ -516,6 +520,7 @@ pub static ES: Strings = Strings {
     err_in_use: "El catálogo «{name}» está siendo usado por otro programa; el catálogo anterior no ha cambiado.",
     err_other: "Error: {error}",
     settings_invalid: "Ajustes ignorados (archivo no válido): {warning}",
+    err_catalog_dir: "No se puede crear la carpeta de catálogos «{dir}»: {error}",
     theme_light: "☀ Claro",
     theme_dark: "🌙 Oscuro",
     theme_auto: "Auto",
