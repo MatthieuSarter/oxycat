@@ -1,6 +1,6 @@
 //! Finding where a cataloged medium is mounted now, and real paths of its entries.
 
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 
 use super::model::Volume;
 
@@ -76,9 +76,14 @@ pub fn is_network_path(path: &str) -> bool {
 
 /// Real path of an entry, from the located source root, the entry's parent folder path (as stored in search results:
 /// `\BD\Asterix`, or a lone separator for the root) and its name.
+///
+/// `None` when a stored component is not a plain name (`..`, `.`, a drive or root, a name with a separator): a crafted
+/// or corrupt catalog must not point outside the source.
 #[must_use]
-pub fn entry_path(source_root: &Path, parent_path: &str, name: &str) -> PathBuf {
-    join_stored(source_root, parent_path).join(name)
+pub fn entry_path(source_root: &Path, parent_path: &str, name: &str) -> Option<PathBuf> {
+    let plain = |c: &str| matches!(Path::new(c).components().collect::<Vec<_>>()[..], [Component::Normal(_)]);
+    let parents = parent_path.split(['\\', '/']).filter(|c| !c.is_empty()).all(plain);
+    (parents && plain(name)).then(|| join_stored(source_root, parent_path).join(name))
 }
 
 #[cfg(test)]
@@ -150,8 +155,20 @@ mod tests {
     #[test]
     fn entry_paths() {
         let root = Path::new("F:\\");
-        assert_eq!(entry_path(root, "\\BD\\Asterix", "01.cbz"), root.join("BD").join("Asterix").join("01.cbz"));
-        assert_eq!(entry_path(root, "\\", "a.txt"), root.join("a.txt"));
-        assert_eq!(entry_path(Path::new("/m"), "/BD", "x"), Path::new("/m").join("BD").join("x"));
+        let found = entry_path(root, "\\BD\\Asterix", "01.cbz");
+        assert_eq!(found, Some(root.join("BD").join("Asterix").join("01.cbz")));
+        assert_eq!(entry_path(root, "\\", "a.txt"), Some(root.join("a.txt")));
+        assert_eq!(entry_path(Path::new("/m"), "/BD", "x"), Some(Path::new("/m").join("BD").join("x")));
+    }
+
+    #[test]
+    fn entry_paths_stay_inside_the_source() {
+        let root = Path::new("/m");
+        let crafted = [("\\BD", ".."), ("\\BD", "."), ("\\..\\x", "a"), ("\\", "a/b"), ("\\", ""), ("/", "/etc")];
+        for (parent, name) in crafted {
+            assert_eq!(entry_path(root, parent, name), None, "{parent:?} {name:?}");
+        }
+        #[cfg(windows)]
+        assert_eq!(entry_path(Path::new("F:\\"), "\\", "C:"), None);
     }
 }
