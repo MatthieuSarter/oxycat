@@ -78,6 +78,17 @@ fn open_write(file: &Path) -> anyhow::Result<Connection> {
     Ok(conn)
 }
 
+/// Upgrades an older Oxycat catalog in place. The version is read first through a read-only connection, so that
+/// current catalogs (and other SQLite files) are never opened for writing; a failure shows up later as an invalid
+/// file.
+fn upgrade_if_old(file: &Path) {
+    let version = Connection::open_with_flags(file, OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX)
+        .and_then(|conn| conn.pragma_query_value(None, "user_version", |r| r.get::<_, i32>(0)));
+    if version.is_ok_and(|v| (1..SCHEMA_VERSION).contains(&v)) {
+        let _ = Connection::open_with_flags(file, OpenFlags::SQLITE_OPEN_READ_WRITE).map(|c| upgrade(&c));
+    }
+}
+
 /// Fails unless the database has the supported schema version and a volume row.
 fn check_catalog(conn: &Connection) -> anyhow::Result<Volume> {
     let version: i32 = conn.pragma_query_value(None, "user_version", |r| r.get(0))?;
@@ -117,8 +128,7 @@ impl CatalogDir {
             if !is_db {
                 continue;
             }
-            // Older Oxycat catalogs are upgraded in place; a failure shows up as an invalid file below.
-            let _ = Connection::open_with_flags(&path, OpenFlags::SQLITE_OPEN_READ_WRITE).map(|c| upgrade(&c));
+            upgrade_if_old(&path);
             let info = open_read(&path).and_then(|conn| {
                 let volume = read_volume(&conn)?;
                 let modified = std::fs::metadata(&path)?.modified()?;
