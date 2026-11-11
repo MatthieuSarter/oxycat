@@ -137,7 +137,12 @@ impl OxycatApp {
                 small(ui, &mut form.min_size, s.min);
                 small(ui, &mut form.max_size, s.max);
                 ui.separator();
-                egui::ComboBox::from_label(s.kind)
+                // Labels go before their combo box (`ComboBox::from_label` puts them after).
+                let named = |label: &'static str| {
+                    move || egui::WidgetInfo::labeled(egui::accesskit::Role::ComboBox, true, label)
+                };
+                ui.label(s.kind);
+                egui::ComboBox::from_id_salt("kind")
                     .selected_text(match form.kind {
                         KindFilter::All => s.kind_all,
                         KindFilter::Files => s.kind_files,
@@ -147,12 +152,19 @@ impl OxycatApp {
                         ui.selectable_value(&mut form.kind, KindFilter::All, s.kind_all);
                         ui.selectable_value(&mut form.kind, KindFilter::Files, s.kind_files);
                         ui.selectable_value(&mut form.kind, KindFilter::Dirs, s.kind_dirs);
-                    });
-                egui::ComboBox::from_label(s.mode).selected_text(mode_label(s, form.mode)).show_ui(ui, |ui| {
-                    for mode in SearchMode::ALL {
-                        ui.selectable_value(&mut form.mode, mode, mode_label(s, mode));
-                    }
-                });
+                    })
+                    .response
+                    .widget_info(named(s.kind));
+                ui.label(s.mode);
+                egui::ComboBox::from_id_salt("mode")
+                    .selected_text(mode_label(s, form.mode))
+                    .show_ui(ui, |ui| {
+                        for mode in SearchMode::ALL {
+                            ui.selectable_value(&mut form.mode, mode, mode_label(s, mode));
+                        }
+                    })
+                    .response
+                    .widget_info(named(s.mode));
                 if ui.button(s.reset).clicked() {
                     *form = SearchForm { pattern: std::mem::take(&mut form.pattern), ..SearchForm::default() };
                 }

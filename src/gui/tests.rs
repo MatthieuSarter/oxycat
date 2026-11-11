@@ -144,3 +144,17 @@ fn folders_tab_follows_catalog_clicks_and_panel_collapses() {
     harness.run_steps(2);
     assert!(harness.query_by_label("Catalogs").is_some());
 }
+
+#[test]
+fn filter_labels_are_left_of_their_combo_boxes() {
+    let tmp = tempfile::tempdir().unwrap();
+    let mut harness = harness(CatalogDir::new(tmp.path().to_path_buf()));
+    harness.run_steps(2);
+    harness.get_by_label_contains("Filters").click();
+    harness.run_steps(2);
+    for label in ["Type", "Mode"] {
+        let text = harness.get_by_role_and_label(Role::Label, label).rect();
+        let combo = harness.get_by_role_and_label(Role::ComboBox, label).rect();
+        assert!(text.max.x <= combo.min.x, "{label}: label {text:?} should be left of {combo:?}");
+    }
+}
