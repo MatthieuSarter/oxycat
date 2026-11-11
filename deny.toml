@@ -18,3 +18,13 @@ allow = [
   "Zlib",
 ]
 confidence-threshold = 0.9
+
+# Unmaintained (not vulnerable) crates pulled in by eframe/egui and opener, with no maintained release to move to yet.
+# Drop each entry once egui / opener no longer depend on it.
+[advisories]
+ignore = [
+  { id = "RUSTSEC-2026-0192", reason = "ttf-parser, egui font parsing" },
+  { id = "RUSTSEC-2026-0370", reason = "zvariant, via zbus 5 (accesskit and opener on Linux)" },
+  { id = "RUSTSEC-2026-0371", reason = "zbus_names, via zbus 5 (accesskit and opener on Linux)" },
+  { id = "RUSTSEC-2026-0372", reason = "zvariant_derive, via zbus 5 (accesskit and opener on Linux)" },
+]

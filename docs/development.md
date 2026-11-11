@@ -2,8 +2,10 @@
 
 ## Toolchain
 
-- Rust stable 1.98 or later (`rustup`), with the `llvm-tools-preview` component for coverage.
-- `cargo install cargo-llvm-cov cargo-deny`.
+- Rust 1.98.1, pinned in `rust-toolchain.toml` (rustup installs it with `clippy`, `rustfmt` and
+  `llvm-tools-preview`); bump it together with `rust-version` in `Cargo.toml`.
+- `cargo install --locked cargo-llvm-cov cargo-deny` (the CI pins the versions it installs).
+- `cargo deny check` checks licenses, advisories, bans and sources (`deny.toml`); the CI runs it.
 - [just](https://just.systems) and the globally installed `repo-linter`.
 - On Windows, the Windows SDK (installed with the MSVC build tools): `build.rs` embeds the icon in the executable with
   its resource compiler.
@@ -30,6 +32,21 @@ The coverage gate (80 % minimum, 90 % targeted) applies to the whole crate excep
 - `src/platform/` — thin wrappers around OS calls (Win32, `/proc`, `statvfs`), exercised manually and by the scanner
   tests;
 - `src/main.rs` — argument dispatch, covered end to end by `tests/cli.rs` (a separate process, not measured).
+
+## Windows tests in CI
+
+The CI has no Windows runner: its `check-windows` job cross-compiles the test suite for `x86_64-pc-windows-gnu` (the
+target of the released `.exe`) and runs it under Wine, so the Win32 code of `src/platform/` and the Windows path
+handling are exercised on every push. Wine is close to Windows, not identical (file locking, NTFS details), so the
+Windows-specific behaviors still deserve a manual check on a real Windows before a release. To replay it locally on
+Linux, with Wine 9 or later (Wine 8 lacks `bcryptprimitives.dll`, which Rust's standard library imports) and a UTF-8
+locale (Wine converts file names through it):
+
+```bash
+sudo apt-get install gcc-mingw-w64-x86-64 wine wine64 && rustup target add x86_64-pc-windows-gnu
+LC_ALL=C.UTF-8 CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER=x86_64-w64-mingw32-gcc \
+  CARGO_TARGET_X86_64_PC_WINDOWS_GNU_RUNNER=wine WINEDEBUG=-all cargo test --target x86_64-pc-windows-gnu
+```
 
 ## Conventions
 

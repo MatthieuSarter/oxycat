@@ -24,9 +24,11 @@ jobs:
       - name: Install Rust and tools
         run: |
           apt-get update && apt-get install -y --no-install-recommends build-essential pkg-config libfontconfig1-dev
-          curl -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --component rustfmt,clippy,llvm-tools
+          # The toolchain itself (version and components) comes from rust-toolchain.toml.
+          curl -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain none
           echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
-          "$HOME/.cargo/bin/cargo" install --locked cargo-llvm-cov cargo-deny
+          "$HOME/.cargo/bin/rustup" toolchain install
+          "$HOME/.cargo/bin/cargo" install --locked cargo-llvm-cov@0.9.1 cargo-deny@0.20.2
       - name: Format
         run: cargo fmt --check
       - name: Clippy
@@ -34,12 +36,43 @@ jobs:
       - name: Tests and coverage (80% minimum)
         run: >-
           cargo llvm-cov --ignore-filename-regex 'src[\/](gui|platform)[\/]|main\.rs' --fail-under-lines 80
-      - name: Licenses
-        run: cargo deny check licenses
+      - name: Licenses, advisories, bans and sources
+        run: cargo deny check
+
+  # No Windows runner: the Windows build (the one released) is cross-compiled and its tests run under Wine. Wine is
+  # close to, not identical with, Windows (file locking, NTFS), but it does run the real Win32 calls of src/platform/.
+  check-windows:
+    name: Tests of the Windows build (Wine)
+    runs-on: ubuntu-latest
+    # Wine 9 or later is required (Rust's std imports bcryptprimitives.dll, missing from Wine 8): Debian trixie ships
+    # Wine 10. The Node.js image is for actions/checkout.
+    container:
+      image: node:22-trixie
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install Rust, the Windows target, MinGW and Wine
+        run: |
+          apt-get update && apt-get install -y --no-install-recommends build-essential gcc-mingw-w64-x86-64 wine wine64
+          curl -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain none
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+          "$HOME/.cargo/bin/rustup" toolchain install
+          "$HOME/.cargo/bin/rustup" target add x86_64-pc-windows-gnu
+      - name: Tests under Wine
+        env:
+          CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER: x86_64-w64-mingw32-gcc
+          CARGO_TARGET_X86_64_PC_WINDOWS_GNU_RUNNER: wine
+          WINEDEBUG: -all
+          # Wine converts file names through the locale: without UTF-8, names like "Astérix" cannot be created.
+          LC_ALL: C.UTF-8
+          # No Mono or Gecko install prompts: the tests need neither .NET nor the HTML engine.
+          WINEDLLOVERRIDES: mscoree,mshtml=
+        run: |
+          wineboot --init
+          cargo test --target x86_64-pc-windows-gnu
 
   release:
     name: Create a new release
-    needs: [check-leaks, check]
+    needs: [check-leaks, check, check-windows]
     uses: public/workflows/.forgejo/workflows/psr/version.yaml@v13
     secrets:
       git-token: ${{ secrets.RELEASE_TOKEN }}
@@ -57,8 +90,10 @@ jobs:
         run: |
           apt-get update && apt-get install -y --no-install-recommends \
             build-essential pkg-config libfontconfig1-dev gcc-mingw-w64-x86-64 jq
-          curl -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --target x86_64-pc-windows-gnu
+          curl -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain none
           echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+          "$HOME/.cargo/bin/rustup" toolchain install
+          "$HOME/.cargo/bin/rustup" target add x86_64-pc-windows-gnu
       - name: Build
         env:
           CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER: x86_64-w64-mingw32-gcc
