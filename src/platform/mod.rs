@@ -60,6 +60,31 @@ pub fn reveal(path: &Path) -> anyhow::Result<()> {
     Ok(opener::reveal(path)?)
 }
 
+/// An icon as RGBA pixels (not premultiplied), rows top to bottom.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Icon {
+    /// Width and height in pixels.
+    pub size: [usize; 2],
+    /// `size[0] * size[1] * 4` bytes.
+    pub rgba: Vec<u8>,
+}
+
+/// The icon the OS shows for files named like `name`, looked up by extension: the file does not need to exist.
+/// `large` asks for the 32 px icon instead of the 16 px one (for high-DPI screens). `None` when unavailable,
+/// always on Linux (no simple system-wide API for it).
+#[must_use]
+pub fn file_icon(name: &str, large: bool) -> Option<Icon> {
+    #[cfg(windows)]
+    {
+        os::file_icon(name, large)
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = (name, large);
+        None
+    }
+}
+
 /// Whether [`show_properties`] is available on this OS.
 pub const HAS_PROPERTIES: bool = cfg!(windows);
 
@@ -86,6 +111,18 @@ pub fn attach_parent_console() {
 #[cfg(test)]
 mod tests {
     use super::volume_info;
+
+    #[cfg(windows)]
+    #[test]
+    fn file_icon_by_extension() {
+        // The file does not exist: the icon comes from the extension's registration.
+        for (large, side) in [(false, 16), (true, 32)] {
+            let icon = super::file_icon("missing.txt", large).unwrap();
+            assert_eq!(icon.size, [side, side]);
+            assert_eq!(icon.rgba.len(), side * side * 4);
+            assert!(icon.rgba.chunks(4).any(|p| p[3] > 0), "fully transparent icon");
+        }
+    }
 
     #[test]
     fn volume_info_of_tempdir_has_total() {

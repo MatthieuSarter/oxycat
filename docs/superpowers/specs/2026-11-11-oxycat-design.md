@@ -108,13 +108,15 @@ decision): all media will be re-cataloged.
 
 - Browses one catalog: breadcrumb (clickable), up button, Backspace = parent, ◀ / ▶ (Ctrl+P / Ctrl+N) = previous /
   next catalog in the left list.
-- Double-click a folder to enter it. Sortable columns: name, size, date.
+- Double-click a folder to enter it, a file to open it (same rules as *Open*, §5.4). Sortable columns: name, size,
+  date.
 - Folder tree on the left (Cathy's directory view): click a folder to show it, arrows expand / collapse; the branch
   of the current folder is expanded and scrolled into view.
 - Status bar: element count and total size, selection size, whether the medium is currently mounted and where.
 
 ### 5.4 Shared list behavior (Search and Folders)
 
+- Names are preceded by an icon: a folder, or the OS icon of the file type (Windows; a generic file icon elsewhere).
 - Multi-selection; **copy** selected rows to the clipboard as tab-separated text with a header row, pasteable into a
   spreadsheet (Claude's call: fixed format instead of Cathy's registry-configurable one).
 - Context menu: Open, Show in Explorer (file manager on Linux), Properties (OS properties dialog; **builder's call** on

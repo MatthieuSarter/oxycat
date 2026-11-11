@@ -187,3 +187,21 @@ fn folder_tree_browses_and_expands() {
     assert!(!tree_shows(&harness, "Astérix"));
     assert!(shows(&harness, "Tintin.cbz"));
 }
+
+#[test]
+fn double_click_on_missing_file_explains() {
+    let (tmp, info) = catalog_of("B1", &[("notes.txt", Some(4))]);
+    // The file is gone from the (still mounted) medium: opening must not launch anything but say why.
+    std::fs::remove_dir_all(tmp.path().join("src")).unwrap();
+    let mut harness = harness(CatalogDir::new(tmp.path().to_path_buf()));
+    harness.run_steps(2);
+    harness.state_mut().open_folder(&info.file, None, None);
+    harness.run_steps(2);
+    for _ in 0..2 {
+        harness.get_by_role_and_label(Role::Label, "notes.txt").click();
+        harness.step();
+    }
+    harness.run_steps(2);
+    let banner = harness.state().banner.clone().unwrap_or_default();
+    assert!(banner.contains("Not found on the plugged-in medium"), "{banner:?}");
+}

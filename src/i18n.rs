@@ -232,6 +232,7 @@ pub struct Strings {
     pub copy_row: &'static str,
     pub export_tree: &'static str,
     pub needs_medium: &'static str,
+    pub entry_missing: &'static str,
 
     // Settings and about windows.
     pub hit_limit: &'static str,
@@ -362,6 +363,7 @@ pub static FR: Strings = Strings {
     copy_row: "Ligne complète",
     export_tree: "Exporter l'arborescence (.txt)…",
     needs_medium: "Branchez le support pour cette action",
+    entry_missing: "Introuvable sur le support branché : {path}",
     hit_limit: "Nombre maximum de résultats",
     default_ignore: "Motifs ignorés par défaut",
     date_format: "Format des dates (vide = selon la langue)",
@@ -490,6 +492,7 @@ pub static EN: Strings = Strings {
     copy_row: "Whole row",
     export_tree: "Export folder tree (.txt)…",
     needs_medium: "Plug the medium in for this action",
+    entry_missing: "Not found on the plugged-in medium: {path}",
     hit_limit: "Maximum number of results",
     default_ignore: "Default ignore patterns",
     date_format: "Date format (empty = language default)",
@@ -618,6 +621,7 @@ pub static ES: Strings = Strings {
     copy_row: "Fila completa",
     export_tree: "Exportar el árbol de carpetas (.txt)…",
     needs_medium: "Conecte el soporte para esta acción",
+    entry_missing: "No encontrado en el soporte conectado: {path}",
     hit_limit: "Número máximo de resultados",
     default_ignore: "Patrones ignorados por defecto",
     date_format: "Formato de fecha (vacío = según el idioma)",

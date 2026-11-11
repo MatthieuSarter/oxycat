@@ -243,10 +243,15 @@ impl OxycatApp {
             sort_entries(&mut self.folders.rows, self.folders.sort.0, self.folders.sort.1);
             self.folders.selection.clear();
         }
-        if let Some(i) = out.double_clicked
-            && self.folders.rows[i].is_dir
-        {
-            *nav = Some(Nav::Dir(Some(self.folders.rows[i].id)));
+        if let Some(i) = out.double_clicked {
+            let entry = self.folders.rows[i].clone();
+            if entry.is_dir {
+                *nav = Some(Nav::Dir(Some(entry.id)));
+            } else {
+                // Opens it with its default application, or explains that the medium must be plugged in.
+                let target = Target { file: info.file.clone(), parent_path: self.folders.path(), entry };
+                self.file_action(FileAction::Open, &[target]);
+            }
         }
         if let Some(action) = out.action {
             let targets = self.folders.targets();
@@ -348,6 +353,10 @@ impl OxycatApp {
                     .map(|root| entry_path(&root, &target.parent_path, &target.entry.name));
                 match real {
                     None => Err(anyhow::anyhow!(s.needs_medium)),
+                    // The medium is there but the entry was moved or deleted since it was cataloged.
+                    Some(path) if !path.exists() => {
+                        Err(anyhow::anyhow!(fill(s.entry_missing, &[("path", &path.to_string_lossy())])))
+                    }
                     Some(path) if action == FileAction::Open => platform::open(&path),
                     Some(path) if action == FileAction::Reveal => platform::reveal(&path),
                     Some(path) => platform::show_properties(&path),

@@ -4,15 +4,23 @@ use std::ffi::OsStr;
 use std::os::windows::ffi::{OsStrExt, OsStringExt};
 use std::path::{Path, PathBuf};
 
+use windows_sys::Win32::Graphics::Gdi::{
+    BI_RGB, BITMAP, BITMAPINFO, BITMAPINFOHEADER, DIB_RGB_COLORS, DeleteObject, GetDC, GetDIBits, GetObjectW, HBITMAP,
+    ReleaseDC,
+};
 use windows_sys::Win32::Storage::FileSystem::{
-    GetDiskFreeSpaceExW, GetDriveTypeW, GetLogicalDrives, GetVolumeInformationW, GetVolumePathNameW,
+    FILE_ATTRIBUTE_NORMAL, GetDiskFreeSpaceExW, GetDriveTypeW, GetLogicalDrives, GetVolumeInformationW,
+    GetVolumePathNameW,
 };
 use windows_sys::Win32::System::Console::{ATTACH_PARENT_PROCESS, AttachConsole};
 use windows_sys::Win32::System::Diagnostics::Debug::{SEM_FAILCRITICALERRORS, SEM_NOOPENFILEERRORBOX, SetErrorMode};
-use windows_sys::Win32::UI::Shell::{SEE_MASK_INVOKEIDLIST, SHELLEXECUTEINFOW, ShellExecuteExW};
-use windows_sys::Win32::UI::WindowsAndMessaging::SW_SHOW;
+use windows_sys::Win32::UI::Shell::{
+    SEE_MASK_INVOKEIDLIST, SHELLEXECUTEINFOW, SHFILEINFOW, SHGFI_ICON, SHGFI_LARGEICON, SHGFI_SMALLICON,
+    SHGFI_USEFILEATTRIBUTES, SHGetFileInfoW, ShellExecuteExW,
+};
+use windows_sys::Win32::UI::WindowsAndMessaging::{DestroyIcon, GetIconInfo, HICON, ICONINFO, SW_SHOW};
 
-use super::VolumeInfo;
+use super::{Icon, VolumeInfo};
 
 const DRIVE_REMOVABLE: u32 = 2;
 const DRIVE_CDROM: u32 = 5;
@@ -130,4 +138,94 @@ pub(super) fn quiet_drive_errors() {
     unsafe {
         SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOOPENFILEERRORBOX);
     }
+}
+
+pub(super) fn file_icon(name: &str, large: bool) -> Option<Icon> {
+    let name = wide(OsStr::new(name));
+    // SAFETY: SHFILEINFOW is a plain C struct for which all-zero is a valid initial value.
+    let mut info: SHFILEINFOW = unsafe { std::mem::zeroed() };
+    let size = u32::try_from(std::mem::size_of::<SHFILEINFOW>()).ok()?;
+    let flags = SHGFI_ICON | SHGFI_USEFILEATTRIBUTES | if large { SHGFI_LARGEICON } else { SHGFI_SMALLICON };
+    // SAFETY: `name` is NUL-terminated and `info` is writable for the size passed.
+    let found = unsafe { SHGetFileInfoW(name.as_ptr(), FILE_ATTRIBUTE_NORMAL, &raw mut info, size, flags) };
+    if found == 0 || info.hIcon.is_null() {
+        return None;
+    }
+    let icon = icon_pixels(info.hIcon);
+    // SAFETY: the icon was created for us by SHGetFileInfoW and is not used afterwards.
+    unsafe { DestroyIcon(info.hIcon) };
+    icon
+}
+
+/// RGBA pixels of an icon handle.
+fn icon_pixels(icon: HICON) -> Option<Icon> {
+    // SAFETY: ICONINFO is a plain C struct for which all-zero is a valid initial value.
+    let mut parts: ICONINFO = unsafe { std::mem::zeroed() };
+    // SAFETY: `parts` is writable; on success we own both bitmaps.
+    if unsafe { GetIconInfo(icon, &raw mut parts) } == 0 {
+        return None;
+    }
+    let pixels = bitmap_bgra(parts.hbmColor).map(|(size, mut px)| {
+        // Icons without an alpha channel take their transparency from the mask (set bits are transparent).
+        if px.chunks(4).all(|p| p[3] == 0)
+            && let Some((_, mask)) = bitmap_bgra(parts.hbmMask)
+        {
+            for (p, m) in px.chunks_mut(4).zip(mask.chunks(4)) {
+                p[3] = if m[0] == 0 { 255 } else { 0 };
+            }
+        }
+        for p in px.chunks_mut(4) {
+            p.swap(0, 2);
+        }
+        Icon { size, rgba: px }
+    });
+    // SAFETY: both bitmaps belong to us since GetIconInfo; deleting a null handle is a harmless failure.
+    unsafe {
+        DeleteObject(parts.hbmColor);
+        DeleteObject(parts.hbmMask);
+    }
+    pixels
+}
+
+/// Size and 32-bit BGRA pixels (rows top to bottom) of a bitmap.
+fn bitmap_bgra(bitmap: HBITMAP) -> Option<([usize; 2], Vec<u8>)> {
+    if bitmap.is_null() {
+        return None;
+    }
+    // SAFETY: BITMAP is a plain C struct for which all-zero is a valid initial value.
+    let mut bm: BITMAP = unsafe { std::mem::zeroed() };
+    let bm_size = i32::try_from(std::mem::size_of::<BITMAP>()).ok()?;
+    // SAFETY: `bm` is writable for the size passed.
+    if unsafe { GetObjectW(bitmap, bm_size, (&raw mut bm).cast()) } == 0 {
+        return None;
+    }
+    let (width, height) = (usize::try_from(bm.bmWidth).ok()?, usize::try_from(bm.bmHeight).ok()?);
+    // SAFETY: BITMAPINFO is a plain C struct for which all-zero is a valid initial value.
+    let mut header: BITMAPINFO = unsafe { std::mem::zeroed() };
+    header.bmiHeader = BITMAPINFOHEADER {
+        biSize: u32::try_from(std::mem::size_of::<BITMAPINFOHEADER>()).ok()?,
+        biWidth: bm.bmWidth,
+        biHeight: -bm.bmHeight, // negative: top-down rows
+        biPlanes: 1,
+        biBitCount: 32,
+        biCompression: BI_RGB,
+        ..header.bmiHeader
+    };
+    let mut px = vec![0u8; width * height * 4];
+    // SAFETY: the screen DC is released below; `px` holds exactly `height` rows of 32-bit pixels.
+    let lines = unsafe {
+        let dc = GetDC(std::ptr::null_mut());
+        let lines = GetDIBits(
+            dc,
+            bitmap,
+            0,
+            u32::try_from(height).ok()?,
+            px.as_mut_ptr().cast(),
+            &raw mut header,
+            DIB_RGB_COLORS,
+        );
+        ReleaseDC(std::ptr::null_mut(), dc);
+        lines
+    };
+    (usize::try_from(lines).ok()? == height).then_some(([width, height], px))
 }

@@ -1,7 +1,8 @@
 //! The shared file table of the Search and Folders tabs: virtualized rows, sortable headers, multi-selection,
 //! double-click and context menu.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashMap};
+use std::path::Path;
 
 use egui::{Align, Layout, RichText, Sense};
 use egui_extras::{Column, TableBuilder};
@@ -136,7 +137,7 @@ pub(super) fn file_table(
                     row.col(|ui| {
                         let text = cell(index, c);
                         if c == 0 {
-                            entry_icon(ui, is_dir(index));
+                            entry_icon(ui, is_dir(index), &text);
                         }
                         if col.right {
                             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
@@ -192,16 +193,42 @@ pub(super) fn file_table(
     out
 }
 
-/// Folder or file icon in front of an entry name.
-fn entry_icon(ui: &mut egui::Ui, is_dir: bool) {
+/// Folder or file icon in front of an entry name: the OS icon of the file type when there is one.
+fn entry_icon(ui: &mut egui::Ui, is_dir: bool, name: &str) {
     let (rect, _) = ui.allocate_exact_size(egui::vec2(16.0, 16.0), Sense::hover());
     if is_dir {
         paint_folder(ui.painter(), rect, false);
+        return;
+    }
+    let ext = Path::new(name).extension().map(|e| e.to_string_lossy().to_lowercase()).unwrap_or_default();
+    if let Some(texture) = file_type_icon(ui.ctx(), &ext) {
+        let uv = egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0));
+        ui.painter().image(texture.id(), rect, uv, egui::Color32::WHITE);
     } else {
         let color = ui.visuals().text_color();
         let font = egui::TextStyle::Body.resolve(ui.style());
         ui.painter().text(rect.center(), egui::Align2::CENTER_CENTER, "📄", font, color);
     }
+}
+
+/// OS icons already loaded, by lowercase extension (`None`: the OS has none).
+type IconCache = HashMap<String, Option<egui::TextureHandle>>;
+
+/// The OS icon of files with extension `ext`, asked for once per extension and kept in egui's memory.
+fn file_type_icon(ctx: &egui::Context, ext: &str) -> Option<egui::TextureHandle> {
+    let id = egui::Id::unique("file_type_icons");
+    if let Some(cached) = ctx.data_mut(|d| d.get_temp_mut_or_default::<IconCache>(id).get(ext).cloned()) {
+        return cached;
+    }
+    let name = if ext.is_empty() { "file".to_owned() } else { format!("file.{ext}") };
+    // The 32 px icon stays sharp on high-DPI screens; the 16 px one is drawn pixel for pixel otherwise.
+    let large = ctx.pixels_per_point() > 1.25;
+    let texture = crate::platform::file_icon(&name, large).map(|icon| {
+        let image = egui::ColorImage::from_rgba_unmultiplied(icon.size, &icon.rgba);
+        ctx.load_texture(format!("file-icon-{ext}"), image, egui::TextureOptions::LINEAR)
+    });
+    ctx.data_mut(|d| d.get_temp_mut_or_default::<IconCache>(id).insert(ext.to_owned(), texture.clone()));
+    texture
 }
 
 /// Folder icon colors, the classic manila yellow (readable on light and dark backgrounds): body, the
