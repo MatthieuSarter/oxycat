@@ -50,16 +50,8 @@ a scheduled task:
 oxycat catalog E:\ --name B1 --comment "Blue USB disk" --archive --ignore "*.tmp; \Temp*"
 ```
 
-- Running it again on the same medium and folder refreshes the catalog (comment, flags and ignore patterns are kept
-  unless given).
-- A name already used by another medium or folder is refused unless `--overwrite` is given; a *preserved* catalog is
-  never overwritten.
-- `--catalogs <dir>` (or the `OXYCAT_CATALOGS` variable) selects the catalog directory.
-- Exit code 0 on success, 1 on failure (message on stderr), 2 on invalid arguments.
-
-Windows Task Scheduler example (action "Start a program"): program `C:\Tools\Oxycat\oxycat.exe`, arguments
-`catalog \\nas\photos --name Photos`. When run from a terminal on Windows, the prompt may come back before Oxycat's
-message is printed: Oxycat is a windowed application that borrows the terminal's console.
+Options, refresh rules, exit codes and scheduled-task examples: see the
+[user guide](docs/user-guide.md#command-line).
 
 ## Documentation
 

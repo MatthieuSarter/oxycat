@@ -86,7 +86,42 @@ Select rows (Ctrl+click, Shift+click) and right-click:
 
 ## Command line
 
-See the [README](../README.md#command-line) for `oxycat catalog`, to catalog media from scripts or scheduled tasks.
+Without arguments, `oxycat` opens its window. The `catalog` command creates or refreshes a catalog without the
+window, for scripts and scheduled tasks:
+
+```bash
+oxycat catalog E:\ --name B1 --comment "Blue USB disk" --archive --ignore "*.tmp; \Temp*"
+```
+
+| Argument / option | Meaning |
+|---|---|
+| `<PATH>` | Drive or folder to catalog (a local path or a network share such as `\\nas\photos`) |
+| `--name <NAME>` | Catalog name (required); it also gives the `.db` file name |
+| `--comment <TEXT>` | Comment; on refresh, the existing comment is kept when omitted |
+| `--archive` / `--no-archive` | Set or clear the *Archive* flag; when omitted, refresh keeps it and a new catalog gets it for removable media |
+| `--ignore <PATTERNS>` | Ignore patterns, same syntax as in the window; when omitted, refresh reuses those stored in the catalog and a new catalog takes `default_ignore` from `oxycat.toml` |
+| `--overwrite` | Allow replacing a catalog of the same name made from another medium or folder |
+| `--catalogs <DIR>` | Catalog directory (also accepted without a command, for the window); see [configuration.md](configuration.md) |
+| `-h`, `--help` / `-V`, `--version` | Help / version |
+
+Behavior:
+
+- Running it again on the **same medium and folder** refreshes the catalog: name, comment, flags and ignore patterns
+  are kept unless given. The medium is recognized by its serial number, whatever its drive letter.
+- A name already used by **another medium or folder** is refused unless `--overwrite` is given.
+- A **preserved** catalog is never overwritten nor refreshed.
+- The previous catalog is only replaced once the new scan has succeeded; if the catalog is open in another program,
+  the command fails and leaves it untouched.
+- A window of Oxycat open on the same catalog directory picks the change up within a couple of seconds.
+
+Exit codes: `0` success (summary on stdout), `1` failure (reason on stderr), `2` invalid arguments.
+
+**Scheduled task example** (Windows Task Scheduler, action *Start a program*): program
+`C:\Tools\Oxycat\oxycat.exe`, arguments `catalog \\nas\photos --name Photos`. On Linux, a cron line such as
+`0 3 * * * /opt/oxycat/oxycat catalog /media/backup --name Backup` does the same.
+
+On Windows, Oxycat is a windowed application that borrows the terminal's console when given a command: in a
+terminal, the prompt may come back before its message is printed.
 
 ## Catalog format
 
