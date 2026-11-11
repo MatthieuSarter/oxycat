@@ -348,7 +348,7 @@ pub(crate) mod tests {
     fn delete_removes_file() {
         let (_tmp, dir) = dir_with(&["B1"]);
         dir.delete(&dir.path_for("B1")).unwrap();
-        assert!(dir.list().catalogs.is_empty());
+        assert_eq!(dir.list().catalogs, [] as [super::CatalogInfo; 0]);
     }
 
     #[test]

@@ -299,7 +299,7 @@ pub(crate) mod tests {
         let before = SearchQuery { to: Some(day + 1), ..q("") };
         assert_eq!(names(&search_catalog(&conn, &before, &info, None).unwrap()), ["zz.txt"]);
         let after = SearchQuery { from: Some(day + 1), kind: KindFilter::Files, ..q("zz") };
-        assert!(search_catalog(&conn, &after, &info, None).unwrap().is_empty());
+        assert_eq!(names(&search_catalog(&conn, &after, &info, None).unwrap()), [] as [&str; 0]);
     }
 
     #[test]

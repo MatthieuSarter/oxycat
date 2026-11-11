@@ -86,7 +86,7 @@ fn missing_source_fails() {
     let d = dirs();
     let out = oxycat(&["catalog", &format!("{}-nope", d.src), "--name", "T", "--catalogs", &d.cats], None);
     assert_eq!(out.status.code(), Some(1));
-    assert!(!stderr(&out).is_empty());
+    assert_ne!(stderr(&out), "");
 }
 
 #[test]

@@ -142,7 +142,7 @@ mod tests {
             [("A".to_owned(), "Astérix 01.cbz".to_owned()), ("B".to_owned(), "asterix 02.cbz".to_owned())]
         );
         assert!(!result.truncated);
-        assert!(result.errors.is_empty());
+        assert_eq!(result.errors, [] as [(String, String); 0]);
     }
 
     #[test]
