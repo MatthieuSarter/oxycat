@@ -6,6 +6,7 @@ allow_zero_version = true
 tag_format = "v{version}"
 add_partial_tags = true
 version_toml = ["Cargo.toml:package.version"]
+version_variables = ["sonar-project.properties:sonar.projectVersion"]
 
 [semantic_release.branches.main]
 match = "main"

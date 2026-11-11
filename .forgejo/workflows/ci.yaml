@@ -1,6 +1,6 @@
 ---
 # Custom workflow: repo-linter's forgejo-workflows rule has no Rust stack.
-name: Check / Release / Build
+name: Check / Release / Build / Sync
 on:
   push:
     branches: [main]
@@ -23,7 +23,8 @@ jobs:
       - uses: actions/checkout@v7
       - name: Install Rust and tools
         run: |
-          apt-get update && apt-get install -y --no-install-recommends build-essential pkg-config libfontconfig1-dev
+          # zip: used by sonar-reports-upload to archive the coverage report.
+          apt-get update && apt-get install -y --no-install-recommends build-essential pkg-config libfontconfig1-dev zip
           # The toolchain itself (version and components) comes from rust-toolchain.toml.
           curl -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain none
           echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
@@ -34,10 +35,26 @@ jobs:
       - name: Clippy
         run: cargo clippy --all-targets -- -D warnings
       - name: Tests and coverage (80% minimum)
-        run: >-
-          cargo llvm-cov --ignore-filename-regex 'src[\/](gui|platform)[\/]|main\.rs' --fail-under-lines 80
+        run: |
+          mkdir -p .reports
+          cargo llvm-cov --ignore-filename-regex 'src[\/](gui|platform)[\/]|main\.rs' --fail-under-lines 80 \
+            --lcov --output-path .reports/lcov.info
+          # The sonar job checks the repository out elsewhere: make the paths relative to the repository root.
+          sed -i "s|^SF:$PWD/|SF:|" .reports/lcov.info
+      - name: Upload the Sonar reports
+        uses: ${{ forgejo.server_url }}/public/actions/sonar-reports-upload@v5
       - name: Licenses, advisories, bans and sources
         run: cargo deny check
+
+  sonar:
+    name: Run SonarQube scan and quality gate check
+    needs: [check]
+    uses: public/workflows/.forgejo/workflows/quality/sonar-scan.yaml@v13
+    with:
+      sonar-host-url: ${{ vars.SONAR_HOST_URL }}
+      sonar-reports-artifact-name: sonar-reports
+    secrets:
+      sonar-token: ${{ secrets.SONAR_TOKEN }}
 
   # No Windows runner: the Windows build (the one released) is cross-compiled and its tests run under Wine. Wine is
   # close to, not identical with, Windows (file locking, NTFS), but it does run the real Win32 calls of src/platform/.
@@ -72,10 +89,22 @@ jobs:
 
   release:
     name: Create a new release
-    needs: [check-leaks, check, check-windows]
+    needs: [check-leaks, sonar, check-windows]
     uses: public/workflows/.forgejo/workflows/psr/version.yaml@v13
     secrets:
       git-token: ${{ secrets.RELEASE_TOKEN }}
+
+  # Mirrors the repository (branches and tags, no release binaries) to the GitHub.com and GitLab.com clones.
+  sync:
+    name: Synchronize remote repositories
+    needs: [release]
+    uses: public/workflows/.forgejo/workflows/git/sync.yaml@v13
+    with:
+      github: true
+      gitlab: true
+    secrets:
+      SYNC_GITHUB_TOKEN: ${{ secrets.SYNC_GITHUB_TOKEN }}
+      SYNC_GITLAB_TOKEN: ${{ secrets.SYNC_GITLAB_TOKEN }}
 
   binaries:
     name: Build and attach the binaries
