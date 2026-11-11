@@ -1,0 +1,82 @@
+---
+# Custom workflow: repo-linter's forgejo-workflows rule has no Rust stack.
+name: Check / Release / Build
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  check-leaks:
+    name: Check for secrets in the repository
+    uses: public/workflows/.forgejo/workflows/security/gitleaks.yaml@v13
+
+  check:
+    name: Lint, test, coverage and licenses
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install Rust and tools
+        run: |
+          apt-get update && apt-get install -y --no-install-recommends build-essential pkg-config libfontconfig1-dev
+          curl -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --component rustfmt,clippy,llvm-tools
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+          "$HOME/.cargo/bin/cargo" install --locked cargo-llvm-cov cargo-deny
+      - name: Format
+        run: cargo fmt --check
+      - name: Clippy
+        run: cargo clippy --all-targets -- -D warnings
+      - name: Tests and coverage (80% minimum)
+        run: >-
+          cargo llvm-cov --ignore-filename-regex 'src[\/](gui|platform)[\/]|main\.rs' --fail-under-lines 80
+      - name: Licenses
+        run: cargo deny check licenses
+
+  release:
+    name: Create a new release
+    needs: [check-leaks, check]
+    uses: public/workflows/.forgejo/workflows/psr/version.yaml@v13
+    secrets:
+      git-token: ${{ secrets.RELEASE_TOKEN }}
+
+  binaries:
+    name: Build and attach the binaries
+    needs: [release]
+    if: ${{ needs.release.outputs.new-version == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: v${{ needs.release.outputs.version }}
+      - name: Install Rust, the Windows target and MinGW
+        run: |
+          apt-get update && apt-get install -y --no-install-recommends \
+            build-essential pkg-config libfontconfig1-dev gcc-mingw-w64-x86-64 jq
+          curl -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --target x86_64-pc-windows-gnu
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+      - name: Build
+        env:
+          CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER: x86_64-w64-mingw32-gcc
+          VERSION: ${{ needs.release.outputs.version }}
+        run: |
+          cargo build --release
+          cargo build --release --target x86_64-pc-windows-gnu
+          mkdir dist
+          cp target/release/oxycat "dist/oxycat-${VERSION}-linux-x86_64"
+          cp target/x86_64-pc-windows-gnu/release/oxycat.exe "dist/oxycat-${VERSION}-windows-x86_64.exe"
+      - name: Attach to the release
+        env:
+          TOKEN: ${{ secrets.RELEASE_TOKEN }}
+          API: ${{ forgejo.server_url }}/api/v1/repos/${{ forgejo.repository }}
+          VERSION: ${{ needs.release.outputs.version }}
+        run: |
+          id=$(curl -sSf -H "Authorization: token ${TOKEN}" "${API}/releases/tags/v${VERSION}" | jq -r .id)
+          for file in dist/*; do
+            curl -sSf -H "Authorization: token ${TOKEN}" -F "attachment=@${file}" \
+              "${API}/releases/${id}/assets?name=$(basename "${file}")" > /dev/null
+          done

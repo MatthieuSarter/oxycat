@@ -1,0 +1,173 @@
+<style>
+  .app { --b0:#1e1f24; --b1:#25272d; --b2:#2d3037; --bd:#3a3d45; --t0:#e6e7ea; --t1:#a8abb3; --t2:#7b7f88; --ac:#4f8cff; --sel:#2a3f66;
+         font: 12px/1.4 "Segoe UI", system-ui, sans-serif; color: var(--t0); background: var(--b0); border: 1px solid var(--bd); border-radius: 8px; overflow: hidden; text-align: left; margin-bottom: 28px; }
+  .app.light { --b0:#ffffff; --b1:#f5f6f8; --b2:#eceef2; --bd:#d9dce2; --t0:#1d2026; --t1:#555b66; --t2:#8a909b; --ac:#2f6fe4; --sel:#dce8ff; }
+  .app .top { display:flex; align-items:center; gap:8px; padding:7px 10px; background:var(--b2); border-bottom:1px solid var(--bd); }
+  .app .top .sp { flex:1; }
+  .app .seg { display:inline-flex; border:1px solid var(--bd); border-radius:5px; overflow:hidden; }
+  .app .seg span { padding:2px 8px; color:var(--t1); }
+  .app .seg span.on { background:var(--ac); color:#fff; }
+  .app .dd { padding:2px 8px; border:1px solid var(--bd); border-radius:5px; color:var(--t1); }
+  .app .main { display:flex; height:430px; }
+  .app .side { width:230px; flex:none; display:flex; flex-direction:column; background:var(--b1); border-right:1px solid var(--bd); }
+  .app .side .hd { display:flex; align-items:center; padding:8px 10px 4px; font-weight:600; }
+  .app .side .hd .sp { flex:1; }
+  .app .in { border:1px solid var(--bd); border-radius:5px; padding:4px 7px; background:var(--b0); color:var(--t2); }
+  .app .in.val { color:var(--t0); }
+  .app .btn { padding:3px 10px; border-radius:5px; background:var(--ac); color:#fff; white-space:nowrap; }
+  .app .btn.ghost { background:transparent; color:var(--t1); border:1px solid var(--bd); }
+  .app .cats { flex:1; overflow:hidden; padding:4px 6px; }
+  .app .cat { display:flex; align-items:center; gap:6px; padding:4px 6px; border-radius:5px; }
+  .app .cat.on { background:var(--sel); }
+  .app .cat .n { flex:1; }
+  .app .cat .m { color:var(--t2); font-size:11px; }
+  .app .badge { font-size:10px; padding:0 5px; border-radius:8px; border:1px solid var(--bd); color:var(--t1); }
+  .app .card { border-top:1px solid var(--bd); padding:8px 10px; background:var(--b2); }
+  .app .card .t { font-weight:600; margin-bottom:4px; }
+  .app .kv { display:grid; grid-template-columns:auto 1fr; gap:2px 8px; color:var(--t1); font-size:11px; }
+  .app .kv b { color:var(--t0); font-weight:500; }
+  .app .bar { height:6px; border-radius:3px; background:var(--bd); overflow:hidden; margin:5px 0; }
+  .app .bar i { display:block; height:100%; background:var(--ac); }
+  .app .right { flex:1; min-width:0; display:flex; flex-direction:column; }
+  .app .tabs { display:flex; gap:2px; padding:6px 10px 0; border-bottom:1px solid var(--bd); }
+  .app .tab { padding:5px 14px; border-radius:5px 5px 0 0; color:var(--t1); }
+  .app .tab.on { color:var(--t0); font-weight:600; box-shadow: inset 0 -2px 0 var(--ac); }
+  .app .row { display:flex; gap:6px; padding:8px 10px; align-items:center; flex-wrap:wrap; }
+  .app .filters { display:flex; gap:6px; flex-wrap:wrap; padding:0 10px 8px; color:var(--t1); align-items:center; }
+  .app .grid { flex:1; overflow:hidden; }
+  .app table { width:100%; border-collapse:collapse; color:inherit; font:inherit; }
+  .app th, .app td { padding:4px 8px; border-bottom:1px solid var(--bd); white-space:nowrap; text-align:left; }
+  .app th { color:var(--t1); font-weight:600; background:var(--b1); position:relative; }
+  .app td.r, .app th.r { text-align:right; }
+  .app tr.sel td { background:var(--sel); }
+  .app .dim { color:var(--t2); }
+  .app .status { display:flex; gap:16px; padding:4px 10px; font-size:11px; color:var(--t2); border-top:1px solid var(--bd); background:var(--b1); }
+  .app .crumb { display:flex; gap:4px; align-items:center; padding:8px 10px; }
+  .app .crumb span.c { color:var(--ac); }
+  .app .menu { position:absolute; background:var(--b1); border:1px solid var(--bd); border-radius:6px; box-shadow:0 6px 18px rgba(0,0,0,.35); padding:4px 0; font-size:12px; z-index:2; min-width:190px; }
+  .app .menu div { padding:4px 14px; }
+  .app .menu div.h { background:var(--sel); }
+  .app .menu hr { border:none; border-top:1px solid var(--bd); margin:4px 0; }
+  .app .menu .k { float:right; color:var(--t2); padding-left:16px; }
+  .note { color: var(--text-secondary); font-size: 13px; margin: 6px 0 10px; }
+</style>
+
+<h2>Option C en détail</h2>
+<p class="subtitle">Haut : onglet Recherche en thème sombre, filtres dépliés. Bas : onglet Dossiers en thème clair, avec le menu clic droit ouvert. La fiche du catalogue sélectionné est en bas du panneau de gauche.</p>
+
+<p class="note"><b>1. Recherche</b> — thème sombre</p>
+<div class="app">
+  <div class="top">
+    <b>Oxycat</b><span class="sp"></span>
+    <span class="seg"><span>☀ Clair</span><span class="on">☾ Sombre</span><span>Auto</span></span>
+    <span class="dd">🌐 Français ▾</span>
+  </div>
+  <div class="main">
+    <div class="side">
+      <div class="hd">Catalogues <span class="sp"></span><span class="btn">+ Ajouter</span></div>
+      <div style="padding:4px 10px"><div class="in">🔎 Filtrer (nom, commentaire)…</div></div>
+      <div style="padding:2px 12px 0;color:var(--t2);font-size:11px">☑ Tout cocher · ☐ Tout décocher</div>
+      <div class="cats">
+        <div class="cat on">☑ <span class="n">B1</span><span class="badge">Archive</span></div>
+        <div class="cat">☑ <span class="n">B2</span><span class="badge">Archive</span></div>
+        <div class="cat">☑ <span class="n">B3</span><span class="badge">Archive</span></div>
+        <div class="cat">☑ <span class="n">sarterm</span><span class="m">🔒</span></div>
+      </div>
+      <div class="card">
+        <div class="t">B1</div>
+        <div class="in val" style="margin-bottom:6px">BD + mangas, disque externe bleu</div>
+        <label style="color:var(--t1)">☑ Archive &nbsp; ☐ Préservé</label>
+        <div class="bar"><i style="width:78%"></i></div>
+        <div class="kv">
+          <span>Utilisé</span><b>1 456 Go / 1 863 Go</b>
+          <span>Libre</span><b>407 Go</b>
+          <span>Fichiers</span><b>214 532 · 8 917 dossiers</b>
+          <span>N° de série</span><b>A41C-77E2</b>
+          <span>Source</span><b>E:\</b>
+          <span>Catalogué le</span><b>08/10/2026 00:16</b>
+        </div>
+      </div>
+    </div>
+    <div class="right">
+      <div class="tabs"><span class="tab on">🔎 Recherche</span><span class="tab">📁 Dossiers</span></div>
+      <div class="row">
+        <div class="in val" style="flex:1;min-width:180px">asterix</div>
+        <span class="btn ghost">Filtres ▴</span>
+        <span class="btn">Rechercher</span>
+      </div>
+      <div class="filters">
+        <span>Date</span><span class="in">du 2015-01-01</span><span class="in">au …</span>
+        <span style="margin-left:8px">Taille</span><span class="in">≥ 10M</span><span class="in">≤ …</span>
+        <span style="margin-left:8px">Mode</span><span class="in val">Standard ▾</span>
+        <span class="btn ghost" style="padding:2px 8px">Réinitialiser</span>
+      </div>
+      <div class="grid">
+        <table>
+          <tr><th>Nom ▾</th><th class="r">Taille</th><th>Date</th><th>Chemin</th><th>Volume</th></tr>
+          <tr class="sel"><td>📄 Asterix 01 - Asterix le Gaulois.cbz</td><td class="r">48,2 Mo</td><td>2019-03-02</td><td class="dim">\BD\Asterix\</td><td>B1</td></tr>
+          <tr><td>📄 Asterix 02 - La Serpe d'or.cbz</td><td class="r">51,7 Mo</td><td>2019-03-02</td><td class="dim">\BD\Asterix\</td><td>B1</td></tr>
+          <tr><td>📄 Asterix 03 - Asterix et les Goths.cbz</td><td class="r">47,9 Mo</td><td>2019-03-02</td><td class="dim">\BD\Asterix\</td><td>B1</td></tr>
+          <tr><td>📁 Asterix</td><td class="r dim">—</td><td>2021-11-14</td><td class="dim">\Archives\BD\</td><td>B3</td></tr>
+          <tr><td>📄 Asterix 01 - Asterix le Gaulois.cbz</td><td class="r">48,2 Mo</td><td>2021-11-14</td><td class="dim">\Archives\BD\Asterix\</td><td>B3</td></tr>
+          <tr><td>📄 Asterix chez les Bretons (film).mkv</td><td class="r">1,4 Go</td><td>2016-06-20</td><td class="dim">\Videos\Animation\</td><td>sarterm</td></tr>
+        </table>
+      </div>
+      <div class="status"><span>6 résultats</span><span>4 catalogues · 0,04 s</span><span>1 sélectionné · 48,2 Mo</span><span style="margin-left:auto">Double-clic : ouvrir le dossier</span></div>
+    </div>
+  </div>
+</div>
+
+<p class="note"><b>2. Dossiers</b> — thème clair, après double-clic sur le premier résultat</p>
+<div class="app light">
+  <div class="top">
+    <b>Oxycat</b><span class="sp"></span>
+    <span class="seg"><span class="on">☀ Clair</span><span>☾ Sombre</span><span>Auto</span></span>
+    <span class="dd">🌐 Français ▾</span>
+  </div>
+  <div class="main" style="height:360px">
+    <div class="side">
+      <div class="hd">Catalogues <span class="sp"></span><span class="btn">+ Ajouter</span></div>
+      <div style="padding:4px 10px"><div class="in">🔎 Filtrer (nom, commentaire)…</div></div>
+      <div class="cats">
+        <div class="cat on">☑ <span class="n">B1</span><span class="badge">Archive</span></div>
+        <div class="cat">☑ <span class="n">B2</span><span class="badge">Archive</span></div>
+        <div class="cat">☑ <span class="n">B3</span><span class="badge">Archive</span></div>
+        <div class="cat">☑ <span class="n">sarterm</span><span class="m">🔒</span></div>
+      </div>
+      <div class="card">
+        <div class="t">B1</div>
+        <div class="kv"><span>Fichiers</span><b>214 532</b><span>Libre</span><b>407 Go</b></div>
+      </div>
+    </div>
+    <div class="right" style="position:relative">
+      <div class="tabs"><span class="tab">🔎 Recherche</span><span class="tab on">📁 Dossiers</span></div>
+      <div class="crumb">
+        <span class="btn ghost" style="padding:1px 7px">◀ B1 ▶</span>
+        <span class="btn ghost" style="padding:1px 7px">⬆</span>
+        <span class="c">B1</span> › <span class="c">BD</span> › <b>Asterix</b>
+        <span style="margin-left:auto;color:var(--t2)">Ctrl+P / Ctrl+N · Retour arrière</span>
+      </div>
+      <div class="grid">
+        <table>
+          <tr><th>Nom ▾</th><th class="r">Taille</th><th>Date</th></tr>
+          <tr class="sel"><td>📄 Asterix 01 - Asterix le Gaulois.cbz</td><td class="r">48,2 Mo</td><td>2019-03-02</td></tr>
+          <tr><td>📄 Asterix 02 - La Serpe d'or.cbz</td><td class="r">51,7 Mo</td><td>2019-03-02</td></tr>
+          <tr><td>📄 Asterix 03 - Asterix et les Goths.cbz</td><td class="r">47,9 Mo</td><td>2019-03-02</td></tr>
+          <tr><td>📄 Asterix 04 - Asterix gladiateur.cbz</td><td class="r">49,1 Mo</td><td>2019-03-02</td></tr>
+          <tr><td>📄 Asterix 05 - Le Tour de Gaule d'Asterix.cbz</td><td class="r">52,3 Mo</td><td>2019-03-02</td></tr>
+        </table>
+      </div>
+      <div class="menu" style="left:250px;top:120px">
+        <div class="h">Ouvrir</div>
+        <div>Ouvrir le dossier dans l'Explorateur</div>
+        <div>Propriétés</div>
+        <hr>
+        <div>Copier <span class="k">Ctrl+C</span></div>
+        <div>Exporter l'arborescence (.txt)…</div>
+        <hr>
+        <div class="dim">Supprimer le fichier (désactivé)</div>
+      </div>
+      <div class="status"><span>38 éléments · 1,8 Go</span><span>1 sélectionné · 48,2 Mo</span><span style="margin-left:auto">● Support B1 branché sur E:</span></div>
+    </div>
+  </div>
+</div>
