@@ -150,7 +150,7 @@ fn filter_labels_are_left_of_their_combo_boxes() {
     let tmp = tempfile::tempdir().unwrap();
     let mut harness = harness(CatalogDir::new(tmp.path().to_path_buf()));
     harness.run_steps(2);
-    harness.get_by_label_contains("Filters").click();
+    harness.get_by_label_contains("Options").click();
     harness.run_steps(2);
     for label in ["Type", "Mode"] {
         let text = harness.get_by_role_and_label(Role::Label, label).rect();

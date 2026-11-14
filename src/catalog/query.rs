@@ -55,6 +55,26 @@ pub fn parent_path<S: std::hash::BuildHasher>(paths: &HashMap<i64, String, S>, p
     parent.and_then(|p| paths.get(&p).cloned()).unwrap_or_else(|| MAIN_SEPARATOR.to_string())
 }
 
+/// Names of the direct children of the folders `ids`, by folder; folders with no children are absent.
+///
+/// # Errors
+/// Any SQLite error.
+pub fn child_names(conn: &Connection, ids: &[i64]) -> rusqlite::Result<HashMap<i64, Vec<String>>> {
+    let mut stmt =
+        conn.prepare("SELECT parent_id, name FROM entries WHERE parent_id IN (SELECT value FROM json_each(?1))")?;
+    let mut names: HashMap<i64, Vec<String>> = HashMap::new();
+    for row in stmt.query_map([json_ids(ids)], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?)))? {
+        let (parent, name) = row?;
+        names.entry(parent).or_default().push(name);
+    }
+    Ok(names)
+}
+
+/// Ids as one JSON array parameter for `json_each`, whatever their number: SQLite caps the number of bound parameters.
+fn json_ids(ids: &[i64]) -> String {
+    format!("[{}]", ids.iter().map(i64::to_string).collect::<Vec<_>>().join(","))
+}
+
 /// Columns read by [`entry_from_row`].
 const ENTRY_COLUMNS: &str = "id, parent_id, name, is_dir, size, mtime";
 
@@ -97,8 +117,7 @@ pub fn search_catalog(
     bound("e.size <= ?", q.max_size.map(|v| Box::new(v) as Box<dyn ToSql>));
     bound("e.mtime >= ?", q.from.map(|v| Box::new(v) as Box<dyn ToSql>));
     bound("e.mtime < ?", q.to.map(|v| Box::new(v) as Box<dyn ToSql>));
-    // One JSON array parameter, whatever the number of ids: SQLite caps the number of bound parameters.
-    let ids = ids.map(|ids| format!("[{}]", ids.iter().map(i64::to_string).collect::<Vec<_>>().join(",")));
+    let ids = ids.map(json_ids);
     bound("e.id IN (SELECT value FROM json_each(?))", ids.map(|v| Box::new(v) as Box<dyn ToSql>));
     match q.kind {
         KindFilter::All => {}
@@ -120,6 +139,7 @@ pub fn search_catalog(
             entry: entry_from_row(r)?,
             name_fold: r.get(6)?,
             path: String::new(),
+            children: None,
         })
     })?
     .collect()
@@ -163,7 +183,7 @@ pub(crate) mod tests {
 
     use chrono::{TimeZone, Utc};
 
-    use super::{ancestors, children, dir_paths, parent_path, search_catalog, subtree_dirs};
+    use super::{ancestors, child_names, children, dir_paths, parent_path, search_catalog, subtree_dirs};
     use crate::catalog::scan::{ScanControl, ScanOptions, catalog};
     use crate::catalog::store::{CatalogDir, CatalogInfo, open_read};
     use crate::core::model::{Entry, KindFilter, SearchQuery};
@@ -231,6 +251,18 @@ pub(crate) mod tests {
         let inside: Vec<(String, bool, Option<u64>)> =
             children(&conn, Some(bd.id)).unwrap().into_iter().map(|e| (e.name, e.is_dir, e.size)).collect();
         assert_eq!(inside, [("Astérix".to_owned(), true, None), ("zz.txt".to_owned(), false, Some(1))]);
+    }
+
+    #[test]
+    fn child_names_by_folder() {
+        let (_t, info) = tree();
+        let conn = open_read(&info.file).unwrap();
+        let (bd, empty) = (find(&conn, "BD"), find(&conn, "Empty"));
+        let names = child_names(&conn, &[bd.id, empty.id]).unwrap();
+        assert_eq!(names.len(), 1);
+        let mut inside = names[&bd.id].clone();
+        inside.sort();
+        assert_eq!(inside, ["Astérix", "zz.txt"]);
     }
 
     #[test]

@@ -42,18 +42,20 @@ pub enum SortKey {
 /// One row of the search results: hits identical but for their volume, sorted by catalog name; never empty.
 pub type HitRow = Vec<Hit>;
 
-/// Rows of the search results, in the order of `hits`: one per hit, or with `group`, one per set of hits sharing name,
-/// size, modification date and folder path (the same entry found on several volumes).
+/// Rows of the search results, in the order of `hits`: one per hit, or with `group`, one per set of hits that are the
+/// same entry found on several volumes: same name and parent folder path, plus same size and modification date for a
+/// file, same children names for a folder (a folder's date changes as soon as its content does, or when it is copied).
 #[must_use]
 pub fn hit_rows(hits: impl IntoIterator<Item = Hit>, group: bool) -> Vec<HitRow> {
     let mut rows: Vec<HitRow> = Vec::new();
-    let mut index: HashMap<(String, Option<u64>, Option<i64>, String), usize> = HashMap::new();
+    let mut index = HashMap::new();
     for hit in hits {
         if !group {
             rows.push(vec![hit]);
             continue;
         }
-        let key = (hit.entry.name.clone(), hit.entry.size, hit.entry.mtime, hit.path.clone());
+        let mtime = if hit.entry.is_dir { None } else { hit.entry.mtime };
+        let key = (hit.entry.name.clone(), hit.entry.size, mtime, hit.children, hit.path.clone());
         let next = rows.len();
         let i = *index.entry(key).or_insert(next);
         if i == next {
@@ -212,6 +214,7 @@ mod tests {
     use crate::catalog::store::CatalogInfo;
     use crate::catalog::store::tests::sample_volume;
     use crate::core::model::{Entry, Hit};
+    use crate::core::modes::children_fingerprint;
     use crate::core::modes::tests::hit;
 
     fn cat(name: &str, comment: &str) -> CatalogInfo {
@@ -294,9 +297,14 @@ mod tests {
             at("Backup 1", "a.txt", Some(2), 10, "/x"),
             at("Backup 1", "a.txt", Some(1), 11, "/x"),
             at("Backup 1", "a.txt", Some(1), 10, "/y"),
-            // Folders have no size: name, date and path decide.
+            // Folders: their date does not count, their children names do.
             at("NAS", "dir", None, 5, "/"),
-            at("Backup 1", "dir", None, 5, "/"),
+            at("Backup 1", "dir", None, 6, "/"),
+            {
+                let mut other = at("Backup 2", "dir", None, 5, "/");
+                other.children = Some(children_fingerprint(["x"]));
+                other
+            },
         ];
         let rows = hit_rows(hits.clone(), true);
         let shown: Vec<(&str, String)> = rows.iter().map(|r| (r[0].entry.name.as_str(), volume_names(r))).collect();
@@ -309,6 +317,7 @@ mod tests {
                 ("a.txt", "Backup 1".to_owned()),
                 ("a.txt", "Backup 1".to_owned()),
                 ("dir", "Backup 1, NAS".to_owned()),
+                ("dir", "Backup 2".to_owned()),
             ]
         );
         // Not grouped: one row per hit, unchanged.

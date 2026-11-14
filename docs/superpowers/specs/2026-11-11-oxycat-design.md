@@ -92,15 +92,16 @@ decision): all media will be re-cataloged.
 - **Pattern** (Cathy syntax): case-insensitive substring; `|` anchors start or end of the name (`.cbz|` = extension
   cbz); at most one `*` wildcard inside (`|s*doc|`); `*str` ≡ `str*` ≡ `str`. Matching must also be insensitive to
   accents (Claude's call: owner searches French comic titles; `asterix` should find `Astérix`).
-- **Filters** (collapsible "Filtres" panel): date from/to, size min/max, mode, reset button.
+- **Options** (collapsible "Options" panel): date from/to, size min/max, kind, mode, grouping of identical results,
+  reset button.
   - Size: decimal units as in Cathy (`3M` = `3000K` = 3 000 000 bytes, `3G`), case-insensitive.
   - Date (Claude's call, replaces Cathy's `YYMMDD`): `YYYY-MM-DD`, `YYYY-MM` (= 1st of month), `YYYY` (= Jan 1st), or
     `-n` = n days before today. Interpreted in the user's local time.
   - Type: all / files only / folders only (Claude's call, replaces Cathy's `Length < 0` trick).
-- **Modes:** Standard; Duplicates (same name **and** size); Same names; Same sizes; Singles (no other entry with same
-  name and size); Parents (match the pattern against the parent folder name); Not archived (entries in the checked
-  non-archive catalogs whose name+size is absent from every checked archive catalog); Archived (complement: present
-  in some archive catalog).
+- **Modes:** Standard; Duplicates (same name **and** size; for folders, same name **and** same direct children names);
+  Same names; Same sizes; Singles (no other entry with same name and size); Parents (match the pattern against the
+  parent folder name); Not archived (entries in the checked non-archive catalogs whose name+size is absent from every
+  checked archive catalog); Archived (complement: present in some archive catalog).
 - Search scope = checked catalogs. Results: name, size, date, path, catalog; sortable by any column; result count is
   capped by a configurable hit limit (Cathy's `-hits`), with a visible "limit reached" notice.
 - **Search within results** (checkbox next to the search button, enabled when there are results): the next search
@@ -108,8 +109,9 @@ decision): all media will be re-cataloged.
   (`e.id IN (SELECT value FROM json_each(?))`), with the currently selected mode; it replaces the results, so it
   chains. Status bar: "n results within total", plus a warning when the refined results were truncated. Any change to
   a catalog of the results (update, rename, delete) unchecks and disables it: its ids are no longer valid.
-- **Group identical results** (checkbox in the filters, on by default, saved as `group_identical`): hits sharing
-  name, size, date and folder path are one row whose *Volume* column lists their volumes. Grouping is pure display
+- **Group identical results** (checkbox in the options, on by default, saved as `group_identical`): hits sharing
+  name and folder path, plus size and date for files or direct children names for folders (a folder's date changes
+  with its content or when copied), are one row whose *Volume* column lists their volumes. Grouping is pure display
   (`core::listing::hit_rows`): the hit limit counts hits, the result count counts rows. Disabled in the Duplicates,
   Same names and Same sizes modes, which exist to show those copies.
 - **Double-click** a result → Folders tab on its parent folder, with the result selected. Must be instant. On a

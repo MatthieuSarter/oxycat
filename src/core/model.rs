@@ -71,6 +71,9 @@ pub struct Hit {
     pub name_fold: String,
     /// Path of its parent folder from the cataloged source, with a leading separator; filled after the search.
     pub path: String,
+    /// For a folder, fingerprint of the names of its direct children (see [`super::modes::children_fingerprint`]);
+    /// filled after the search. `None` for files.
+    pub children: Option<u64>,
 }
 
 /// Which kinds of entries a search returns.

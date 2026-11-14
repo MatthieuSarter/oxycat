@@ -62,7 +62,7 @@ Lowercase `and` / `or` are plain text (`rock and roll` searches that text). With
 pattern and parentheses are plain text (`Movie (2019)` works as is); in an expression, put text containing parentheses
 or the words `AND` / `OR` between double quotes. The *Parents* and archive modes apply the whole expression.
 
-**Filters** (button *Filters*):
+**Options** (button *Options*):
 
 - **Date**: modification date from / to (both included), as `YYYY-MM-DD`, `YYYY-MM` (first day of the month),
   `YYYY` (January 1st) or `-n` (n days ago), in local time.
@@ -71,7 +71,8 @@ or the words `AND` / `OR` between double quotes. The *Parents* and archive modes
 - **Type**: all, files only, folders only.
 - **Mode**:
   - *Standard*: every match;
-  - *Duplicates*: files having the same name **and** size as another file;
+  - *Duplicates*: files having the same name **and** size as another file, folders having the same name **and** the
+    same entry names directly inside as another folder;
   - *Same names* / *Same sizes*: files sharing their name / size with another file;
   - *Singles*: files with no other file of the same name and size;
   - *Parent folder*: entries whose parent folder name matches the pattern (search an author to list their albums);
@@ -82,12 +83,13 @@ or the words `AND` / `OR` between double quotes. The *Parents* and archive modes
 Results are capped by the *Maximum number of results* setting (10 000 by default); the status bar says when the limit
 is reached. Click a column header to sort. **Double-click a result to open its folder** in the Folders tab.
 
-**Group identical results** (in *Filters*, checked by default): the same file or folder found on several media
-(backups, copies of a disk) — same name, size, modification date and path — is shown as one row, whose *Volume* column
-lists the volumes (`Backup 1, Backup 2, NAS`). Double-clicking such a row asks which volume to open. The status bar
-counts rows, while the *Maximum number of results* applies to the matches before grouping. Uncheck the box to get one
-row per volume; the choice is remembered. It has no effect in the *Duplicates*, *Same names* and *Same sizes* modes,
-which are there to show those copies.
+**Group identical results** (in *Options*, checked by default): the same file or folder found on several media (backups,
+copies of a disk) is shown as one row, whose *Volume* column lists the volumes (`Backup 1, Backup 2, NAS`). Files must
+have the same name, size, modification date and path; folders the same name, path and entry names directly inside (their
+date is ignored: copying a folder or changing its content changes it), the row showing the date of its first volume.
+Double-clicking such a row asks which volume to open. The status bar counts rows, while the *Maximum number of results*
+applies to the matches before grouping. Uncheck the box to get one row per volume; the choice is remembered. It has no
+effect in the *Duplicates*, *Same names* and *Same sizes* modes, which are there to show those copies.
 
 **Search within results**: once a search has results, check *Search within results* next to the *Search* button and
 the next search only looks among them (in their catalogs that are still checked), with the filters and mode then

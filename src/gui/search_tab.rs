@@ -1,4 +1,4 @@
-//! Search tab: the form, its filters, the background search and the results table.
+//! Search tab: the form, its options, the background search and the results table.
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -41,7 +41,7 @@ pub(super) struct VolumeChoice {
 /// State of the Search tab.
 pub(super) struct SearchTab {
     form: SearchForm,
-    show_filters: bool,
+    show_options: bool,
     error: Option<FormError>,
     /// The results, one row per hit or per group of identical hits.
     pub rows: Vec<HitRow>,
@@ -71,7 +71,7 @@ impl Default for SearchTab {
     fn default() -> Self {
         SearchTab {
             form: SearchForm::default(),
-            show_filters: false,
+            show_options: false,
             error: None,
             rows: Vec::new(),
             mode: SearchMode::default(),
@@ -208,9 +208,9 @@ impl OxycatApp {
         ui.allocate_ui_with_layout(bar, egui::Layout::right_to_left(egui::Align::Center), |ui| {
             run |= ui.button(s.search).clicked();
             ui.add_enabled(refinable && idle, egui::Checkbox::new(&mut self.search.within, s.within_results));
-            let arrow = if self.search.show_filters { "⏶" } else { "⏷" };
-            if ui.button(format!("{} {arrow}", s.filters)).clicked() {
-                self.search.show_filters = !self.search.show_filters;
+            let arrow = if self.search.show_options { "⏶" } else { "⏷" };
+            if ui.button(format!("{} {arrow}", s.options)).clicked() {
+                self.search.show_options = !self.search.show_options;
             }
             let field = egui::TextEdit::singleline(&mut self.search.form.pattern)
                 .hint_text(s.search_hint)
@@ -218,7 +218,7 @@ impl OxycatApp {
             let response = ui.add(field);
             run |= enter(&response, ui);
         });
-        if self.search.show_filters {
+        if self.search.show_options {
             let form = &mut self.search.form;
             ui.horizontal_wrapped(|ui| {
                 let mut small = |ui: &mut egui::Ui, text: &mut String, hint: &str| {
@@ -611,7 +611,7 @@ mod tests {
 
         // Turned off: one row per volume, at once and on the next searches; the setting is saved.
         harness.state_mut().tab = Tab::Search;
-        harness.state_mut().search.show_filters = true;
+        harness.state_mut().search.show_options = true;
         harness.run_steps(2);
         harness.get_by_label("Group identical results").click();
         harness.run_steps(2);

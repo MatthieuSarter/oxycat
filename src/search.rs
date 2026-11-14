@@ -7,15 +7,15 @@ use std::time::{Duration, Instant};
 
 use rayon::prelude::*;
 
-use crate::catalog::query::{dir_paths, parent_path, search_catalog};
+use crate::catalog::query::{child_names, dir_paths, parent_path, search_catalog};
 use crate::catalog::store::{CatalogInfo, open_read};
 use crate::core::model::{Hit, KindFilter, SearchQuery};
-use crate::core::modes::{SearchMode, apply_mode, key};
+use crate::core::modes::{SearchMode, apply_mode, children_fingerprint, key};
 
 /// Outcome of a search over several catalogs.
 #[derive(Debug, Default)]
 pub struct SearchResult {
-    /// Matching entries, at most the requested limit, with their folder paths filled.
+    /// Matching entries, at most the requested limit, with their folder paths and children fingerprints filled.
     pub hits: Vec<Hit>,
     /// Whether more entries matched than the limit allowed.
     pub truncated: bool,
@@ -43,8 +43,9 @@ pub fn search(
 ) -> SearchResult {
     let started = Instant::now();
     let archive_mode = matches!(mode, SearchMode::NotArchived | SearchMode::Archived);
-    // Grouping modes compare files with each other: they need every matching file.
-    let query = if mode.is_grouping() { SearchQuery { kind: KindFilter::Files, ..q.clone() } } else { q.clone() };
+    // Grouping modes compare entries with each other: they need every match. Only Duplicates compares folders.
+    let files_only = mode.is_grouping() && mode != SearchMode::Duplicates;
+    let query = if files_only { SearchQuery { kind: KindFilter::Files, ..q.clone() } } else { q.clone() };
     let per_catalog = (!mode.is_grouping()).then_some(limit.saturating_add(1));
 
     let candidates: Vec<&CatalogInfo> = catalogs
@@ -62,6 +63,8 @@ pub fn search(
         errors.extend(reference_errors);
     }
 
+    let mut hits = hits;
+    fill_children(&mut hits, &mut errors);
     let mut hits = apply_mode(mode, hits, &archive_keys);
     let truncated = hits.len() > limit;
     hits.truncate(limit);
@@ -111,6 +114,32 @@ fn run(
     (hits, errors)
 }
 
+/// Fills [`Hit::children`] for the folders of `hits`, opening each catalog holding some once.
+fn fill_children(hits: &mut [Hit], errors: &mut Vec<(String, String)>) {
+    let mut dirs: HashMap<PathBuf, (String, Vec<i64>)> = HashMap::new();
+    for hit in hits.iter().filter(|h| h.entry.is_dir) {
+        dirs.entry(hit.catalog_file.clone())
+            .or_insert_with(|| (hit.catalog_name.clone(), Vec::new()))
+            .1
+            .push(hit.entry.id);
+    }
+    let mut names: HashMap<PathBuf, HashMap<i64, Vec<String>>> = HashMap::new();
+    for (file, (catalog, ids)) in dirs {
+        match open_read(&file).and_then(|conn| Ok(child_names(&conn, &ids)?)) {
+            Ok(found) => {
+                names.insert(file, found);
+            }
+            Err(e) => errors.push((catalog, format!("{e:#}"))),
+        }
+    }
+    for hit in hits.iter_mut().filter(|h| h.entry.is_dir) {
+        // Unknown children (unreadable catalog) never match a real fingerprint.
+        hit.children = names
+            .get(&hit.catalog_file)
+            .map(|by_dir| children_fingerprint(by_dir.get(&hit.entry.id).into_iter().flatten().map(String::as_str)));
+    }
+}
+
 /// Fills [`Hit::path`], opening each catalog present in `hits` once.
 fn fill_paths(hits: &mut [Hit], errors: &mut Vec<(String, String)>) {
     let mut paths: HashMap<PathBuf, HashMap<i64, String>> = HashMap::new();
@@ -137,7 +166,7 @@ mod tests {
     use crate::catalog::query::tests::catalog_of;
     use crate::catalog::store::CatalogInfo;
     use crate::core::listing::ids_by_catalog;
-    use crate::core::model::SearchQuery;
+    use crate::core::model::{KindFilter, SearchQuery};
     use crate::core::modes::SearchMode;
     use crate::core::pattern::Expr;
 
@@ -192,6 +221,20 @@ mod tests {
         let found: Vec<String> = result.hits.iter().map(|h| format!("{}/{}", h.catalog_name, h.entry.name)).collect();
         assert_eq!(found.len(), 2);
         assert!(found.contains(&"A/x.txt".to_owned()) && found.contains(&"B/x.txt".to_owned()), "{found:?}");
+    }
+
+    #[test]
+    fn duplicate_folders_compare_children() {
+        let (t1, a) = catalog_of("A", &[("Photos/a.jpg", Some(1)), ("Photos/b.jpg", Some(2)), ("Docs/x.txt", Some(1))]);
+        let (t2, b) = catalog_of("B", &[("Photos/b.jpg", Some(5)), ("Photos/a.jpg", Some(5)), ("Docs/y.txt", Some(1))]);
+        let cats = vec![a, b];
+        let result = search(&cats, &SearchQuery { kind: KindFilter::Dirs, ..q("") }, SearchMode::Duplicates, 10, None);
+        let found: Vec<String> = result.hits.iter().map(|h| format!("{}/{}", h.catalog_name, h.entry.name)).collect();
+        assert_eq!(found, ["A/Photos", "B/Photos"]);
+        // Every folder gets its fingerprint, whatever the mode.
+        let all = search(&cats, &q(""), SearchMode::Standard, 10, None);
+        assert!(all.hits.iter().all(|h| h.children.is_some() == h.entry.is_dir), "{:?}", all.hits);
+        drop((t1, t2));
     }
 
     #[test]
