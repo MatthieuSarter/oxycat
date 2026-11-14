@@ -4,7 +4,7 @@ use chrono::{Days, NaiveDate, NaiveTime, TimeZone};
 
 use super::model::{KindFilter, SearchQuery};
 use super::modes::SearchMode;
-use super::pattern::Pattern;
+use super::pattern::{Expr, PatternError};
 use super::units::{parse_date, parse_size};
 
 /// The search form as typed by the user.
@@ -29,8 +29,8 @@ pub struct SearchForm {
 /// The form field holding an invalid value.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FormError {
-    /// Pattern with more than one inner `*`.
-    Pattern,
+    /// Invalid pattern or expression.
+    Pattern(PatternError),
     /// Invalid "from" date.
     From,
     /// Invalid "to" date.
@@ -49,7 +49,7 @@ pub fn parse_form<Tz: TimeZone>(form: &SearchForm, today: NaiveDate, tz: &Tz) ->
     fn optional(text: &str) -> Option<&str> {
         Some(text.trim()).filter(|t| !t.is_empty())
     }
-    let pattern = Pattern::parse(&form.pattern).map_err(|_| FormError::Pattern)?;
+    let pattern = Expr::parse(&form.pattern).map_err(FormError::Pattern)?;
     let size = |text: &str, error| optional(text).map(|t| parse_size(t).map_err(|_| error)).transpose();
     let day = |text: &str, error, days_after: u64| {
         optional(text)
@@ -82,6 +82,7 @@ mod tests {
     use super::{FormError, SearchForm, parse_form};
     use crate::core::model::KindFilter;
     use crate::core::modes::SearchMode;
+    use crate::core::pattern::PatternError;
 
     fn today() -> NaiveDate {
         NaiveDate::from_ymd_opt(2026, 11, 11).unwrap()
@@ -127,7 +128,8 @@ mod tests {
             f(&mut form);
             parse_form(&form, today(), &paris()).unwrap_err()
         };
-        assert_eq!(bad(|f| f.pattern = "a*b*c".to_owned()), FormError::Pattern);
+        assert_eq!(bad(|f| f.pattern = "a*b*c".to_owned()), FormError::Pattern(PatternError::TooManyWildcards));
+        assert_eq!(bad(|f| f.pattern = "(a OR b".to_owned()), FormError::Pattern(PatternError::UnbalancedParentheses));
         assert_eq!(bad(|f| f.from = "yesterday".to_owned()), FormError::From);
         assert_eq!(bad(|f| f.to = "2026-02-30".to_owned()), FormError::To);
         assert_eq!(bad(|f| f.min_size = "big".to_owned()), FormError::MinSize);

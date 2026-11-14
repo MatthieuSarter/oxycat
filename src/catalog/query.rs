@@ -80,12 +80,11 @@ pub fn search_catalog(
     info: &CatalogInfo,
     limit: Option<usize>,
 ) -> rusqlite::Result<Vec<Hit>> {
-    let mut conditions: Vec<&str> = Vec::new();
-    let mut values: Vec<Box<dyn ToSql>> = Vec::new();
-    if !q.pattern.is_empty() {
-        conditions.push(if q.parents { "p.name_fold LIKE ? ESCAPE '\\'" } else { "e.name_fold LIKE ? ESCAPE '\\'" });
-        values.push(Box::new(q.pattern.to_like()));
-    }
+    let mut likes = Vec::new();
+    let column = if q.parents { "p.name_fold" } else { "e.name_fold" };
+    let pattern = (!q.pattern.is_empty()).then(|| q.pattern.to_sql(column, &mut likes));
+    let mut conditions: Vec<&str> = pattern.as_deref().into_iter().collect();
+    let mut values: Vec<Box<dyn ToSql>> = likes.into_iter().map(|like| Box::new(like) as Box<dyn ToSql>).collect();
     let mut bound = |condition: &'static str, value: Option<Box<dyn ToSql>>| {
         if let Some(value) = value {
             conditions.push(condition);
@@ -163,7 +162,7 @@ pub(crate) mod tests {
     use crate::catalog::scan::{ScanControl, ScanOptions, catalog};
     use crate::catalog::store::{CatalogDir, CatalogInfo, open_read};
     use crate::core::model::{Entry, KindFilter, SearchQuery};
-    use crate::core::pattern::Pattern;
+    use crate::core::pattern::Expr;
 
     /// Catalog of a source tree given as (relative path, size; `None` = folder).
     pub(crate) fn catalog_of(name: &str, files: &[(&str, Option<usize>)]) -> (tempfile::TempDir, CatalogInfo) {
@@ -203,7 +202,7 @@ pub(crate) mod tests {
     }
 
     fn q(pattern: &str) -> SearchQuery {
-        SearchQuery { pattern: Pattern::parse(pattern).unwrap(), ..SearchQuery::all() }
+        SearchQuery { pattern: Expr::parse(pattern).unwrap(), ..SearchQuery::all() }
     }
 
     fn names(hits: &[crate::core::model::Hit]) -> Vec<String> {
@@ -265,6 +264,24 @@ pub(crate) mod tests {
         let conn = open_read(&info.file).unwrap();
         assert_eq!(names(&search_catalog(&conn, &q("100%"), &info, None).unwrap()), ["100%.txt"]);
         assert_eq!(names(&search_catalog(&conn, &q("my_file"), &info, None).unwrap()), ["my_file.txt"]);
+    }
+
+    #[test]
+    fn search_expression() {
+        let (_t, info) = tree();
+        let conn = open_read(&info.file).unwrap();
+        let found = |pattern: &str| names(&search_catalog(&conn, &q(pattern), &info, None).unwrap());
+        assert_eq!(found("zz OR 100%"), ["100%.txt", "zz.txt"]);
+        assert_eq!(found("asterix AND .mkv|"), ["Asterix film.mkv"]);
+        assert_eq!(found("(01 OR 02 OR film) AND |ast"), ["Asterix film.mkv"]);
+        assert_eq!(found("(01 OR 02 OR film) AND .cbz|"), ["01.cbz", "02.cbz"]);
+        let parents = SearchQuery { parents: true, ..q("|aster AND ix|") };
+        assert_eq!(names(&search_catalog(&conn, &parents, &info, None).unwrap()), ["01.cbz", "02.cbz"]);
+        let parents = SearchQuery { parents: true, ..q("asterix OR films") };
+        assert_eq!(
+            names(&search_catalog(&conn, &parents, &info, None).unwrap()),
+            ["01.cbz", "02.cbz", "Asterix film.mkv"]
+        );
     }
 
     #[test]

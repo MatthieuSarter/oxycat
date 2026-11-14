@@ -47,6 +47,21 @@ Type part of a name and press Enter or *Search*. The search covers the checked c
 
 At most one `*` is allowed inside a pattern. An empty pattern matches everything.
 
+Patterns can be combined with the uppercase words **`AND`** and **`OR`**, and grouped with parentheses: `AND` binds
+tighter than `OR`, so `a OR b AND c` means `a OR (b AND c)`. Each operand keeps the pattern syntax above, spaces
+included (there is no implicit `AND` between words).
+
+| Expression | Finds |
+|---|---|
+| `asterix OR obelix` | names containing "asterix" or "obelix" |
+| `asterix AND .cbz\|` | names containing "asterix" and ending with ".cbz" |
+| `(asterix OR obelix) AND .cbz\|` | ".cbz" names containing "asterix" or "obelix" |
+| `"Movie (2019)" OR "Tom AND Jerry"` | names containing "Movie (2019)" or "Tom AND Jerry" |
+
+Lowercase `and` / `or` are plain text (`rock and roll` searches that text). Without `AND` or `OR`, the field is a single
+pattern and parentheses are plain text (`Movie (2019)` works as is); in an expression, put text containing parentheses
+or the words `AND` / `OR` between double quotes. The *Parents* and archive modes apply the whole expression.
+
 **Filters** (button *Filters*):
 
 - **Date**: modification date from / to (both included), as `YYYY-MM-DD`, `YYYY-MM` (first day of the month),

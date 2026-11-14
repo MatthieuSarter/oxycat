@@ -15,6 +15,7 @@ use crate::core::form::{FormError, SearchForm, parse_form};
 use crate::core::listing::{SortKey, selection_total, sort_hits};
 use crate::core::model::{Hit, KindFilter};
 use crate::core::modes::SearchMode;
+use crate::core::pattern::PatternError;
 use crate::i18n::{Strings, fill};
 use crate::search::{SearchResult, search};
 
@@ -108,7 +109,14 @@ fn mode_label(s: &Strings, mode: SearchMode) -> &'static str {
 /// Label of the form field holding an invalid value.
 fn field_label(s: &Strings, error: FormError) -> String {
     match error {
-        FormError::Pattern => s.too_many_wildcards.to_owned(),
+        FormError::Pattern(error) => match error {
+            PatternError::TooManyWildcards => s.too_many_wildcards,
+            PatternError::UnbalancedParentheses => s.unbalanced_parentheses,
+            PatternError::MissingOperand => s.missing_operand,
+            PatternError::MissingOperator => s.missing_operator,
+            PatternError::UnterminatedQuote => s.unterminated_quote,
+        }
+        .to_owned(),
         FormError::From => format!("{} {} : {}", s.date, s.from, s.invalid_value),
         FormError::To => format!("{} {} : {}", s.date, s.to, s.invalid_value),
         FormError::MinSize => format!("{} {} : {}", s.size, s.min, s.invalid_value),

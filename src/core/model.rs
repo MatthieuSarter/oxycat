@@ -88,8 +88,8 @@ pub enum KindFilter {
 /// Conditions of a search, already parsed.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SearchQuery {
-    /// Name pattern.
-    pub pattern: super::pattern::Pattern,
+    /// Name pattern, possibly combined with `AND` / `OR`.
+    pub pattern: super::pattern::Expr,
     /// Match the pattern against the parent folder's name instead of the entry's (Cathy's "Parents" mode).
     pub parents: bool,
     /// Minimum size in bytes (excludes folders).
@@ -109,7 +109,11 @@ impl SearchQuery {
     #[must_use]
     pub fn all() -> SearchQuery {
         SearchQuery {
-            pattern: super::pattern::Pattern { anchored_start: false, anchored_end: false, parts: vec![String::new()] },
+            pattern: super::pattern::Expr::Leaf(super::pattern::Pattern {
+                anchored_start: false,
+                anchored_end: false,
+                parts: vec![String::new()],
+            }),
             parents: false,
             min_size: None,
             max_size: None,

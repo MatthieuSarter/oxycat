@@ -118,10 +118,10 @@ mod tests {
     use crate::catalog::store::CatalogInfo;
     use crate::core::model::SearchQuery;
     use crate::core::modes::SearchMode;
-    use crate::core::pattern::Pattern;
+    use crate::core::pattern::Expr;
 
     fn q(pattern: &str) -> SearchQuery {
-        SearchQuery { pattern: Pattern::parse(pattern).unwrap(), ..SearchQuery::all() }
+        SearchQuery { pattern: Expr::parse(pattern).unwrap(), ..SearchQuery::all() }
     }
 
     fn two() -> (Vec<tempfile::TempDir>, Vec<CatalogInfo>) {
@@ -182,6 +182,9 @@ mod tests {
         let arch = search(&cats, &q(".txt|"), SearchMode::Archived, 10);
         assert_eq!(arch.hits.iter().map(|h| h.entry.name.as_str()).collect::<Vec<_>>(), ["x.txt"]);
         assert_eq!(arch.hits[0].catalog_name, "B");
+        // The archive side uses the same expression.
+        let not = search(&cats, &q("x.txt OR y.txt"), SearchMode::NotArchived, 10);
+        assert_eq!(not.hits.iter().map(|h| h.entry.name.as_str()).collect::<Vec<_>>(), ["y.txt"]);
     }
 
     #[test]

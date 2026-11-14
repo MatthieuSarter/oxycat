@@ -87,6 +87,8 @@ decision): all media will be re-cataloged.
 
 ### 5.2 Search tab
 
+- **Expression**: patterns combined with uppercase `AND` / `OR` (`AND` first) and parentheses; only when the field
+  contains an operator do parentheses group and `"…"` quote literal text, otherwise the field is a single pattern.
 - **Pattern** (Cathy syntax): case-insensitive substring; `|` anchors start or end of the name (`.cbz|` = extension
   cbz); at most one `*` wildcard inside (`|s*doc|`); `*str` ≡ `str*` ≡ `str`. Matching must also be insensitive to
   accents (Claude's call: owner searches French comic titles; `asterix` should find `Astérix`).
