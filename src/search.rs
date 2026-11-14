@@ -27,24 +27,37 @@ pub struct SearchResult {
 
 /// Searches `catalogs` and returns at most `limit` hits.
 ///
+/// With `within` (entry ids by catalog file, see [`crate::core::listing::ids_by_catalog`]), only the catalogs it
+/// lists are searched, each restricted to its own ids: a search within previous results. The archive reference side of
+/// the archive modes is never restricted: it only tells whether an archived copy exists.
+///
 /// Each catalog gets its own connection on a shared pool of `max(1, cores - 1)` threads, so the machine stays
 /// responsive. A failing catalog is reported in [`SearchResult::errors`] without stopping the others.
 #[must_use]
-pub fn search(catalogs: &[CatalogInfo], q: &SearchQuery, mode: SearchMode, limit: usize) -> SearchResult {
+pub fn search(
+    catalogs: &[CatalogInfo],
+    q: &SearchQuery,
+    mode: SearchMode,
+    limit: usize,
+    within: Option<&HashMap<PathBuf, Vec<i64>>>,
+) -> SearchResult {
     let started = Instant::now();
     let archive_mode = matches!(mode, SearchMode::NotArchived | SearchMode::Archived);
     // Grouping modes compare files with each other: they need every matching file.
     let query = if mode.is_grouping() { SearchQuery { kind: KindFilter::Files, ..q.clone() } } else { q.clone() };
     let per_catalog = (!mode.is_grouping()).then_some(limit.saturating_add(1));
 
-    let candidates: Vec<&CatalogInfo> = catalogs.iter().filter(|c| !archive_mode || !c.volume.archive).collect();
-    let (hits, mut errors) = run(&candidates, &query, per_catalog);
+    let candidates: Vec<&CatalogInfo> = catalogs
+        .iter()
+        .filter(|c| (!archive_mode || !c.volume.archive) && within.is_none_or(|w| w.contains_key(&c.file)))
+        .collect();
+    let (hits, mut errors) = run(&candidates, &query, per_catalog, within);
     let mut archive_keys = HashSet::new();
     if archive_mode {
         // The archive side only needs the same names; other filters must not hide an archived copy.
         let references: Vec<&CatalogInfo> = catalogs.iter().filter(|c| c.volume.archive).collect();
         let by_name = SearchQuery { pattern: q.pattern.clone(), kind: KindFilter::Files, ..SearchQuery::all() };
-        let (reference_hits, reference_errors) = run(&references, &by_name, None);
+        let (reference_hits, reference_errors) = run(&references, &by_name, None, None);
         archive_keys = reference_hits.iter().map(key).collect();
         errors.extend(reference_errors);
     }
@@ -69,13 +82,20 @@ fn pool() -> &'static rayon::ThreadPool {
     })
 }
 
-/// Runs `q` on each catalog in parallel; returns all hits and the per-catalog errors.
-fn run(catalogs: &[&CatalogInfo], q: &SearchQuery, limit: Option<usize>) -> (Vec<Hit>, Vec<(String, String)>) {
+/// Runs `q` on each catalog in parallel, restricted to its ids in `within` if given; returns all hits and the
+/// per-catalog errors.
+fn run(
+    catalogs: &[&CatalogInfo],
+    q: &SearchQuery,
+    limit: Option<usize>,
+    within: Option<&HashMap<PathBuf, Vec<i64>>>,
+) -> (Vec<Hit>, Vec<(String, String)>) {
     let results: Vec<(String, anyhow::Result<Vec<Hit>>)> = pool().install(|| {
         catalogs
             .par_iter()
             .map(|info| {
-                let found = open_read(&info.file).and_then(|conn| Ok(search_catalog(&conn, q, info, limit)?));
+                let ids = within.and_then(|w| w.get(&info.file)).map(Vec::as_slice);
+                let found = open_read(&info.file).and_then(|conn| Ok(search_catalog(&conn, q, info, limit, ids)?));
                 (info.volume.name.clone(), found)
             })
             .collect()
@@ -116,6 +136,7 @@ mod tests {
     use super::search;
     use crate::catalog::query::tests::catalog_of;
     use crate::catalog::store::CatalogInfo;
+    use crate::core::listing::ids_by_catalog;
     use crate::core::model::SearchQuery;
     use crate::core::modes::SearchMode;
     use crate::core::pattern::Expr;
@@ -133,7 +154,7 @@ mod tests {
     #[test]
     fn merges_catalogs() {
         let (_t, cats) = two();
-        let result = search(&cats, &q("asterix"), SearchMode::Standard, 100);
+        let result = search(&cats, &q("asterix"), SearchMode::Standard, 100, None);
         let mut found: Vec<(String, String)> =
             result.hits.iter().map(|h| (h.catalog_name.clone(), h.entry.name.clone())).collect();
         found.sort();
@@ -148,26 +169,26 @@ mod tests {
     #[test]
     fn truncates_and_flags() {
         let (_t, cats) = two();
-        let result = search(&cats, &q(""), SearchMode::Standard, 2);
+        let result = search(&cats, &q(""), SearchMode::Standard, 2, None);
         assert_eq!(result.hits.len(), 2);
         assert!(result.truncated);
-        let exact = search(&cats, &q("asterix"), SearchMode::Standard, 2);
+        let exact = search(&cats, &q("asterix"), SearchMode::Standard, 2, None);
         assert!(!exact.truncated);
     }
 
     #[test]
     fn paths_filled() {
         let (_t, cats) = two();
-        let result = search(&cats, &q("astérix 01"), SearchMode::Standard, 10);
+        let result = search(&cats, &q("astérix 01"), SearchMode::Standard, 10, None);
         assert_eq!(result.hits[0].path, format!("{SEP}BD"));
-        let top = search(&cats, &q("y.txt"), SearchMode::Standard, 10);
+        let top = search(&cats, &q("y.txt"), SearchMode::Standard, 10, None);
         assert_eq!(top.hits[0].path, SEP.to_string());
     }
 
     #[test]
     fn grouping_mode_spans_catalogs() {
         let (_t, cats) = two();
-        let result = search(&cats, &q(".txt|"), SearchMode::Duplicates, 10);
+        let result = search(&cats, &q(".txt|"), SearchMode::Duplicates, 10, None);
         let found: Vec<String> = result.hits.iter().map(|h| format!("{}/{}", h.catalog_name, h.entry.name)).collect();
         assert_eq!(found.len(), 2);
         assert!(found.contains(&"A/x.txt".to_owned()) && found.contains(&"B/x.txt".to_owned()), "{found:?}");
@@ -177,13 +198,13 @@ mod tests {
     fn archive_modes_use_archive_catalogs() {
         let (_t, mut cats) = two();
         cats[0].volume.archive = true;
-        let not = search(&cats, &q(".txt|"), SearchMode::NotArchived, 10);
+        let not = search(&cats, &q(".txt|"), SearchMode::NotArchived, 10, None);
         assert_eq!(not.hits.iter().map(|h| h.entry.name.as_str()).collect::<Vec<_>>(), ["y.txt"]);
-        let arch = search(&cats, &q(".txt|"), SearchMode::Archived, 10);
+        let arch = search(&cats, &q(".txt|"), SearchMode::Archived, 10, None);
         assert_eq!(arch.hits.iter().map(|h| h.entry.name.as_str()).collect::<Vec<_>>(), ["x.txt"]);
         assert_eq!(arch.hits[0].catalog_name, "B");
         // The archive side uses the same expression.
-        let not = search(&cats, &q("x.txt OR y.txt"), SearchMode::NotArchived, 10);
+        let not = search(&cats, &q("x.txt OR y.txt"), SearchMode::NotArchived, 10, None);
         assert_eq!(not.hits.iter().map(|h| h.entry.name.as_str()).collect::<Vec<_>>(), ["y.txt"]);
     }
 
@@ -196,9 +217,50 @@ mod tests {
         bad.file = broken;
         bad.volume.name = "Broken".to_owned();
         cats.push(bad);
-        let result = search(&cats, &q("x.txt"), SearchMode::Standard, 10);
+        let result = search(&cats, &q("x.txt"), SearchMode::Standard, 10, None);
         assert_eq!(result.hits.len(), 2);
         assert_eq!(result.errors.len(), 1);
         assert_eq!(result.errors[0].0, "Broken");
+    }
+
+    #[test]
+    fn within_previous_results() {
+        let (_t, cats) = two();
+        let first = search(&cats, &q(".cbz| OR x.txt"), SearchMode::Standard, 10, None);
+        assert_eq!(first.hits.len(), 4);
+        // Only entries of the first results matching the new query; repeatable.
+        let ids = ids_by_catalog(&first.hits);
+        let second = search(&cats, &q("asterix OR y.txt"), SearchMode::Standard, 10, Some(&ids));
+        let mut found: Vec<String> =
+            second.hits.iter().map(|h| format!("{}/{}", h.catalog_name, h.entry.name)).collect();
+        found.sort();
+        assert_eq!(found, ["A/Astérix 01.cbz", "B/asterix 02.cbz"]);
+        let ids = ids_by_catalog(&second.hits);
+        let third = search(&cats, &q("02"), SearchMode::Standard, 10, Some(&ids));
+        assert_eq!(third.hits.iter().map(|h| h.entry.name.as_str()).collect::<Vec<_>>(), ["asterix 02.cbz"]);
+        assert_eq!(third.hits[0].path, SEP.to_string());
+    }
+
+    #[test]
+    fn within_keeps_ids_per_catalog() {
+        let (_t, cats) = two();
+        // A's ids only: B shares them but is not searched at all.
+        let from_a = search(&cats[..1], &q(""), SearchMode::Standard, 10, None);
+        let ids = ids_by_catalog(&from_a.hits);
+        let refined = search(&cats, &q(""), SearchMode::Standard, 10, Some(&ids));
+        assert!(refined.hits.iter().all(|h| h.catalog_name == "A"), "{:?}", refined.hits);
+        assert_eq!(refined.hits.len(), from_a.hits.len());
+    }
+
+    #[test]
+    fn within_archive_reference_unrestricted() {
+        let (_t, mut cats) = two();
+        cats[0].volume.archive = true;
+        let txt = search(&cats, &q(".txt|"), SearchMode::Standard, 10, None);
+        // Keep only B's entries: A (the archive) is absent from the restriction yet still the reference.
+        let only_b: Vec<_> = txt.hits.into_iter().filter(|h| h.catalog_name == "B").collect();
+        let ids = ids_by_catalog(&only_b);
+        let not = search(&cats, &q(""), SearchMode::NotArchived, 10, Some(&ids));
+        assert_eq!(not.hits.iter().map(|h| h.entry.name.as_str()).collect::<Vec<_>>(), ["y.txt"]);
     }
 }

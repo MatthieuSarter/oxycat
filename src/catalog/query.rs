@@ -70,7 +70,8 @@ fn entry_from_row(r: &rusqlite::Row<'_>) -> rusqlite::Result<Entry> {
     })
 }
 
-/// Entries of one catalog matching a query, at most `limit` of them. Paths are left empty.
+/// Entries of one catalog matching a query, at most `limit` of them, restricted to the entry `ids` when given (the
+/// ids of this catalog only: they are per file). Paths are left empty.
 ///
 /// # Errors
 /// Any SQLite error.
@@ -79,6 +80,7 @@ pub fn search_catalog(
     q: &SearchQuery,
     info: &CatalogInfo,
     limit: Option<usize>,
+    ids: Option<&[i64]>,
 ) -> rusqlite::Result<Vec<Hit>> {
     let mut likes = Vec::new();
     let column = if q.parents { "p.name_fold" } else { "e.name_fold" };
@@ -95,6 +97,9 @@ pub fn search_catalog(
     bound("e.size <= ?", q.max_size.map(|v| Box::new(v) as Box<dyn ToSql>));
     bound("e.mtime >= ?", q.from.map(|v| Box::new(v) as Box<dyn ToSql>));
     bound("e.mtime < ?", q.to.map(|v| Box::new(v) as Box<dyn ToSql>));
+    // One JSON array parameter, whatever the number of ids: SQLite caps the number of bound parameters.
+    let ids = ids.map(|ids| format!("[{}]", ids.iter().map(i64::to_string).collect::<Vec<_>>().join(",")));
+    bound("e.id IN (SELECT value FROM json_each(?))", ids.map(|v| Box::new(v) as Box<dyn ToSql>));
     match q.kind {
         KindFilter::All => {}
         KindFilter::Files => conditions.push("e.is_dir = 0"),
@@ -252,7 +257,7 @@ pub(crate) mod tests {
     fn search_pattern_folded() {
         let (_t, info) = tree();
         let conn = open_read(&info.file).unwrap();
-        let hits = search_catalog(&conn, &q("ASTERIX"), &info, None).unwrap();
+        let hits = search_catalog(&conn, &q("ASTERIX"), &info, None, None).unwrap();
         assert_eq!(names(&hits), ["Asterix film.mkv", "Astérix"]);
         assert_eq!(hits[0].catalog_name, "T");
         assert_eq!(hits[0].catalog_file, info.file);
@@ -262,24 +267,24 @@ pub(crate) mod tests {
     fn search_literal_percent_underscore() {
         let (_t, info) = tree();
         let conn = open_read(&info.file).unwrap();
-        assert_eq!(names(&search_catalog(&conn, &q("100%"), &info, None).unwrap()), ["100%.txt"]);
-        assert_eq!(names(&search_catalog(&conn, &q("my_file"), &info, None).unwrap()), ["my_file.txt"]);
+        assert_eq!(names(&search_catalog(&conn, &q("100%"), &info, None, None).unwrap()), ["100%.txt"]);
+        assert_eq!(names(&search_catalog(&conn, &q("my_file"), &info, None, None).unwrap()), ["my_file.txt"]);
     }
 
     #[test]
     fn search_expression() {
         let (_t, info) = tree();
         let conn = open_read(&info.file).unwrap();
-        let found = |pattern: &str| names(&search_catalog(&conn, &q(pattern), &info, None).unwrap());
+        let found = |pattern: &str| names(&search_catalog(&conn, &q(pattern), &info, None, None).unwrap());
         assert_eq!(found("zz OR 100%"), ["100%.txt", "zz.txt"]);
         assert_eq!(found("asterix AND .mkv|"), ["Asterix film.mkv"]);
         assert_eq!(found("(01 OR 02 OR film) AND |ast"), ["Asterix film.mkv"]);
         assert_eq!(found("(01 OR 02 OR film) AND .cbz|"), ["01.cbz", "02.cbz"]);
         let parents = SearchQuery { parents: true, ..q("|aster AND ix|") };
-        assert_eq!(names(&search_catalog(&conn, &parents, &info, None).unwrap()), ["01.cbz", "02.cbz"]);
+        assert_eq!(names(&search_catalog(&conn, &parents, &info, None, None).unwrap()), ["01.cbz", "02.cbz"]);
         let parents = SearchQuery { parents: true, ..q("asterix OR films") };
         assert_eq!(
-            names(&search_catalog(&conn, &parents, &info, None).unwrap()),
+            names(&search_catalog(&conn, &parents, &info, None, None).unwrap()),
             ["01.cbz", "02.cbz", "Asterix film.mkv"]
         );
     }
@@ -289,7 +294,7 @@ pub(crate) mod tests {
         let (_t, info) = tree();
         let conn = open_read(&info.file).unwrap();
         let query = SearchQuery { parents: true, ..q("asterix") };
-        assert_eq!(names(&search_catalog(&conn, &query, &info, None).unwrap()), ["01.cbz", "02.cbz"]);
+        assert_eq!(names(&search_catalog(&conn, &query, &info, None, None).unwrap()), ["01.cbz", "02.cbz"]);
     }
 
     #[test]
@@ -297,7 +302,7 @@ pub(crate) mod tests {
         let (_t, info) = tree();
         let conn = open_read(&info.file).unwrap();
         let query = SearchQuery { min_size: Some(10), max_size: Some(30), ..q("") };
-        assert_eq!(names(&search_catalog(&conn, &query, &info, None).unwrap()), ["01.cbz", "02.cbz"]);
+        assert_eq!(names(&search_catalog(&conn, &query, &info, None, None).unwrap()), ["01.cbz", "02.cbz"]);
     }
 
     #[test]
@@ -314,9 +319,9 @@ pub(crate) mod tests {
         let conn = open_read(&info.file).unwrap();
         let day = old.timestamp();
         let before = SearchQuery { to: Some(day + 1), ..q("") };
-        assert_eq!(names(&search_catalog(&conn, &before, &info, None).unwrap()), ["zz.txt"]);
+        assert_eq!(names(&search_catalog(&conn, &before, &info, None, None).unwrap()), ["zz.txt"]);
         let after = SearchQuery { from: Some(day + 1), kind: KindFilter::Files, ..q("zz") };
-        assert_eq!(names(&search_catalog(&conn, &after, &info, None).unwrap()), [] as [&str; 0]);
+        assert_eq!(names(&search_catalog(&conn, &after, &info, None, None).unwrap()), [] as [&str; 0]);
     }
 
     #[test]
@@ -324,16 +329,33 @@ pub(crate) mod tests {
         let (_t, info) = tree();
         let conn = open_read(&info.file).unwrap();
         let query = SearchQuery { kind: KindFilter::Dirs, ..q("") };
-        assert_eq!(names(&search_catalog(&conn, &query, &info, None).unwrap()), ["Astérix", "BD", "Empty", "Films"]);
+        assert_eq!(
+            names(&search_catalog(&conn, &query, &info, None, None).unwrap()),
+            ["Astérix", "BD", "Empty", "Films"]
+        );
         let files = SearchQuery { kind: KindFilter::Files, ..q("asterix") };
-        assert_eq!(names(&search_catalog(&conn, &files, &info, None).unwrap()), ["Asterix film.mkv"]);
+        assert_eq!(names(&search_catalog(&conn, &files, &info, None, None).unwrap()), ["Asterix film.mkv"]);
     }
 
     #[test]
     fn limit_respected() {
         let (_t, info) = tree();
         let conn = open_read(&info.file).unwrap();
-        assert_eq!(search_catalog(&conn, &q(""), &info, Some(3)).unwrap().len(), 3);
+        assert_eq!(search_catalog(&conn, &q(""), &info, Some(3), None).unwrap().len(), 3);
+    }
+
+    #[test]
+    fn ids_restrict_the_search() {
+        let (_t, info) = tree();
+        let conn = open_read(&info.file).unwrap();
+        let ids = [find(&conn, "01.cbz").id, find(&conn, "Asterix film.mkv").id, find(&conn, "zz.txt").id];
+        let within =
+            |pattern: &str, ids: &[i64]| names(&search_catalog(&conn, &q(pattern), &info, None, Some(ids)).unwrap());
+        assert_eq!(within("asterix OR .cbz|", &ids), ["01.cbz", "Asterix film.mkv"]);
+        assert_eq!(within("", &ids), ["01.cbz", "Asterix film.mkv", "zz.txt"]);
+        assert_eq!(within("", &[]), [] as [&str; 0]);
+        let parents = SearchQuery { parents: true, ..q("asterix") };
+        assert_eq!(names(&search_catalog(&conn, &parents, &info, None, Some(&ids)).unwrap()), ["01.cbz"]);
     }
 
     #[test]

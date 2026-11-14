@@ -103,6 +103,11 @@ decision): all media will be re-cataloged.
   in some archive catalog).
 - Search scope = checked catalogs. Results: name, size, date, path, catalog; sortable by any column; result count is
   capped by a configurable hit limit (Cathy's `-hits`), with a visible "limit reached" notice.
+- **Search within results** (checkbox next to the search button, enabled when there are results): the next search
+  runs the new query on the checked catalogs present in the results, each restricted to its own result ids
+  (`e.id IN (SELECT value FROM json_each(?))`), with the currently selected mode; it replaces the results, so it
+  chains. Status bar: "n results within total", plus a warning when the refined results were truncated. Any change to
+  a catalog of the results (update, rename, delete) unchecks and disables it: its ids are no longer valid.
 - **Double-click** a result → Folders tab on its parent folder, with the result selected. Must be instant.
 - Status bar: result count, catalogs searched, search duration, selection count and total size.
 

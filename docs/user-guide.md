@@ -82,6 +82,13 @@ or the words `AND` / `OR` between double quotes. The *Parents* and archive modes
 Results are capped by the *Maximum number of results* setting (10 000 by default); the status bar says when the limit
 is reached. Click a column header to sort. **Double-click a result to open its folder** in the Folders tab.
 
+**Search within results**: once a search has results, check *Search within results* next to the *Search* button and
+the next search only looks among them (in their catalogs that are still checked), with the filters and mode then
+selected; the status bar shows "*n* results within *total*". Each refined search replaces the results, so searches
+can be chained to narrow them step by step; uncheck the box to search the checked catalogs again. If the results being
+refined were capped by the limit, the status bar warns that matches beyond them were not searched. Updating,
+renaming or deleting a catalog of the results unchecks and disables the box (its entries are renumbered).
+
 ## Browsing folders
 
 The Folders tab shows one folder of a catalog: click the breadcrumb or ⬆ (or press Backspace) to go up, double-click

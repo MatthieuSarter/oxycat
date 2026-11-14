@@ -3,6 +3,7 @@
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
 use std::fmt::{Display, Write};
+use std::path::PathBuf;
 
 use chrono::TimeZone;
 
@@ -71,6 +72,16 @@ pub fn sort_entries(entries: &mut [Entry], key: SortKey, ascending: bool) {
 /// Reverses an ordering for a descending sort.
 fn directed(ordering: Ordering, ascending: bool) -> Ordering {
     if ascending { ordering } else { ordering.reverse() }
+}
+
+/// Entry ids of the hits, by catalog file: the restriction of a "search within results" (ids are per catalog file).
+#[must_use]
+pub fn ids_by_catalog(hits: &[Hit]) -> HashMap<PathBuf, Vec<i64>> {
+    let mut ids: HashMap<PathBuf, Vec<i64>> = HashMap::new();
+    for hit in hits {
+        ids.entry(hit.catalog_file.clone()).or_default().push(hit.entry.id);
+    }
+    ids
 }
 
 /// Number of selected rows and their total size (folders count as 0).
@@ -159,8 +170,8 @@ mod tests {
     use std::collections::HashSet;
 
     use super::{
-        DirTree, NEWLINE, SortKey, TreeRow, filter_catalogs, format_timestamp, rows_to_tsv, selection_total,
-        sort_entries, sort_hits, tree_text, visible_tree,
+        DirTree, NEWLINE, SortKey, TreeRow, filter_catalogs, format_timestamp, ids_by_catalog, rows_to_tsv,
+        selection_total, sort_entries, sort_hits, tree_text, visible_tree,
     };
     use crate::catalog::store::CatalogInfo;
     use crate::catalog::store::tests::sample_volume;
@@ -181,6 +192,19 @@ mod tests {
         assert_eq!(names("DESSINEE"), ["B1"]);
         assert_eq!(names("film"), ["B2"]);
         assert_eq!(names("  "), ["B1", "B2", "sarterm"]);
+    }
+
+    #[test]
+    fn ids_grouped_by_catalog() {
+        let mut hits = hits();
+        hits[0].entry.id = 7;
+        hits.push(hit("Z", false, "gamma.txt", Some(1)));
+        let ids = ids_by_catalog(&hits);
+        assert_eq!(ids.len(), 3);
+        // The same id in two catalogs stays apart.
+        assert_eq!(ids[&std::path::PathBuf::from("Z.db")], [7, 1]);
+        assert_eq!(ids[&std::path::PathBuf::from("A.db")], [1]);
+        assert!(ids_by_catalog(&[]).is_empty());
     }
 
     fn hits() -> Vec<Hit> {
