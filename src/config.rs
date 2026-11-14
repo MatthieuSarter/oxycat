@@ -51,6 +51,8 @@ pub struct Settings {
     pub thousands_separator: Option<String>,
     /// Whether the catalog panel is collapsed to the bare list.
     pub catalogs_collapsed: bool,
+    /// Whether search results identical but for their volume are shown as a single row.
+    pub group_identical: bool,
 }
 
 impl Default for Settings {
@@ -63,6 +65,7 @@ impl Default for Settings {
             date_format: None,
             thousands_separator: None,
             catalogs_collapsed: false,
+            group_identical: true,
         }
     }
 }
@@ -168,6 +171,7 @@ mod tests {
             date_format: Some("%Y".to_owned()),
             thousands_separator: Some(" ".to_owned()),
             catalogs_collapsed: true,
+            group_identical: false,
         };
         save_settings(tmp.path(), &settings).unwrap();
         assert_eq!(load_settings(tmp.path()), (settings, None));

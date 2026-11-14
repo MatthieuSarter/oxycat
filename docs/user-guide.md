@@ -82,6 +82,13 @@ or the words `AND` / `OR` between double quotes. The *Parents* and archive modes
 Results are capped by the *Maximum number of results* setting (10 000 by default); the status bar says when the limit
 is reached. Click a column header to sort. **Double-click a result to open its folder** in the Folders tab.
 
+**Group identical results** (in *Filters*, checked by default): the same file or folder found on several media
+(backups, copies of a disk) — same name, size, modification date and path — is shown as one row, whose *Volume* column
+lists the volumes (`Backup 1, Backup 2, NAS`). Double-clicking such a row asks which volume to open. The status bar
+counts rows, while the *Maximum number of results* applies to the matches before grouping. Uncheck the box to get one
+row per volume; the choice is remembered. It has no effect in the *Duplicates*, *Same names* and *Same sizes* modes,
+which are there to show those copies.
+
 **Search within results**: once a search has results, check *Search within results* next to the *Search* button and
 the next search only looks among them (in their catalogs that are still checked), with the filters and mode then
 selected; the status bar shows "*n* results within *total*". Each refined search replaces the results, so searches
@@ -107,6 +114,10 @@ Select rows (Ctrl+click, Shift+click) and right-click:
   bytes, date, path and volume, ready to paste into a spreadsheet), one line per selected entry. Paths are those of
   the plugged-in medium, or where it was cataloged from when it is unplugged.
 - **Export folder tree** (on a folder) saves the list of its sub-folders, indented, to a `.txt` file.
+
+On a search row grouping several volumes, *Open*, *Show in file manager*, *Properties* and *Export folder tree* first
+ask which volume to use (unplugged ones are greyed out when the action needs the medium); *Copy* uses the row as shown,
+its paths those of its first plugged-in volume.
 
 ## Command line
 

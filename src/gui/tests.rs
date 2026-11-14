@@ -45,9 +45,9 @@ fn search_then_open_folder() {
     search_field.type_text("asterix");
     harness.run_steps(2);
     harness.get_by_label("Search").click();
-    step_until(&mut harness, |app| !app.search.hits.is_empty());
+    step_until(&mut harness, |app| !app.search.rows.is_empty());
     // Accent-insensitive: "asterix" finds the "Astérix" folder.
-    assert_eq!(harness.state().search.hits.len(), 1);
+    assert_eq!(harness.state().search.rows.len(), 1);
     assert!(shows(&harness, "Astérix"));
 
     // Double-click the result (after a pause, or egui counts a triple click with the Search click): the Folders

@@ -108,7 +108,13 @@ decision): all media will be re-cataloged.
   (`e.id IN (SELECT value FROM json_each(?))`), with the currently selected mode; it replaces the results, so it
   chains. Status bar: "n results within total", plus a warning when the refined results were truncated. Any change to
   a catalog of the results (update, rename, delete) unchecks and disables it: its ids are no longer valid.
-- **Double-click** a result → Folders tab on its parent folder, with the result selected. Must be instant.
+- **Group identical results** (checkbox in the filters, on by default, saved as `group_identical`): hits sharing
+  name, size, date and folder path are one row whose *Volume* column lists their volumes. Grouping is pure display
+  (`core::listing::hit_rows`): the hit limit counts hits, the result count counts rows. Disabled in the Duplicates,
+  Same names and Same sizes modes, which exist to show those copies.
+- **Double-click** a result → Folders tab on its parent folder, with the result selected. Must be instant. On a
+  grouped row, a chooser asks for the volume first; so do Open, Show in file manager, Properties and Export folder
+  tree (volumes whose medium is unplugged are greyed out for the first three). Copy acts on the row as shown.
 - Status bar: result count, catalogs searched, search duration, selection count and total size.
 
 ### 5.3 Folders tab

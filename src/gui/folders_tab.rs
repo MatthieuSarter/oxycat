@@ -23,6 +23,8 @@ pub(super) struct Target {
     /// Parent folder path from the cataloged source, with a leading separator.
     pub parent_path: String,
     pub entry: Entry,
+    /// Text of the *Volume* column: the catalog name, or every volume of a grouped search row.
+    pub volumes: String,
 }
 
 /// State of the Folders tab.
@@ -110,7 +112,12 @@ impl FoldersTab {
             .rows
             .iter()
             .filter_map(|&i| self.rows.get(i))
-            .map(|e| Target { file: info.file.clone(), parent_path: parent_path.clone(), entry: e.clone() })
+            .map(|e| Target {
+                file: info.file.clone(),
+                parent_path: parent_path.clone(),
+                entry: e.clone(),
+                volumes: info.volume.name.clone(),
+            })
             .collect()
     }
 }
@@ -249,7 +256,12 @@ impl OxycatApp {
                 *nav = Some(Nav::Dir(Some(entry.id)));
             } else {
                 // Opens it with its default application, or explains that the medium must be plugged in.
-                let target = Target { file: info.file.clone(), parent_path: self.folders.path(), entry };
+                let target = Target {
+                    file: info.file.clone(),
+                    parent_path: self.folders.path(),
+                    entry,
+                    volumes: info.volume.name.clone(),
+                };
                 self.file_action(FileAction::Open, &[target]);
             }
         }
@@ -318,7 +330,7 @@ impl OxycatApp {
             )
         });
         if copy || copy_name {
-            let targets = if self.tab == Tab::Search { self.search.targets() } else { self.folders.targets() };
+            let targets = if self.tab == Tab::Search { self.search_targets() } else { self.folders.targets() };
             let what = if copy_name { CopyWhat::Name } else { CopyWhat::FullPath };
             self.copy(&targets, what);
         }
@@ -379,13 +391,12 @@ impl OxycatApp {
             let rows: Vec<Vec<String>> = targets
                 .iter()
                 .map(|t| {
-                    let catalog = self.catalog(&t.file).map(|c| c.volume.name.clone()).unwrap_or_default();
                     vec![
                         t.entry.name.clone(),
                         t.entry.size.map(|b| b.to_string()).unwrap_or_default(),
                         self.fmt.date(t.entry.mtime),
                         t.parent_path.clone(),
-                        catalog,
+                        t.volumes.clone(),
                     ]
                 })
                 .collect();

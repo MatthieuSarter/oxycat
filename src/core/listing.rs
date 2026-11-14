@@ -39,9 +39,45 @@ pub enum SortKey {
     Catalog,
 }
 
-/// Sorts search hits by a column; ties are broken by name.
-pub fn sort_hits(hits: &mut [Hit], key: SortKey, ascending: bool) {
-    hits.sort_by(|a, b| {
+/// One row of the search results: hits identical but for their volume, sorted by catalog name; never empty.
+pub type HitRow = Vec<Hit>;
+
+/// Rows of the search results, in the order of `hits`: one per hit, or with `group`, one per set of hits sharing name,
+/// size, modification date and folder path (the same entry found on several volumes).
+#[must_use]
+pub fn hit_rows(hits: impl IntoIterator<Item = Hit>, group: bool) -> Vec<HitRow> {
+    let mut rows: Vec<HitRow> = Vec::new();
+    let mut index: HashMap<(String, Option<u64>, Option<i64>, String), usize> = HashMap::new();
+    for hit in hits {
+        if !group {
+            rows.push(vec![hit]);
+            continue;
+        }
+        let key = (hit.entry.name.clone(), hit.entry.size, hit.entry.mtime, hit.path.clone());
+        let next = rows.len();
+        let i = *index.entry(key).or_insert(next);
+        if i == next {
+            rows.push(Vec::new());
+        }
+        rows[i].push(hit);
+    }
+    for row in &mut rows {
+        row.sort_by_cached_key(|h| h.catalog_name.to_lowercase());
+    }
+    rows
+}
+
+/// The volumes of a row, as shown in its *Volume* column: `Backup 1, Backup 2`.
+#[must_use]
+pub fn volume_names(row: &[Hit]) -> String {
+    row.iter().map(|h| h.catalog_name.as_str()).collect::<Vec<_>>().join(", ")
+}
+
+/// Sorts search rows by a column of their first hit (so by their first volume for the *Volume* column); ties are
+/// broken by name.
+pub fn sort_rows(rows: &mut [HitRow], key: SortKey, ascending: bool) {
+    rows.sort_by(|a, b| {
+        let (a, b) = (&a[0], &b[0]);
         let primary = match key {
             SortKey::Name => Ordering::Equal,
             SortKey::Size => a.entry.size.cmp(&b.entry.size),
@@ -76,7 +112,7 @@ fn directed(ordering: Ordering, ascending: bool) -> Ordering {
 
 /// Entry ids of the hits, by catalog file: the restriction of a "search within results" (ids are per catalog file).
 #[must_use]
-pub fn ids_by_catalog(hits: &[Hit]) -> HashMap<PathBuf, Vec<i64>> {
+pub fn ids_by_catalog<'a>(hits: impl IntoIterator<Item = &'a Hit>) -> HashMap<PathBuf, Vec<i64>> {
     let mut ids: HashMap<PathBuf, Vec<i64>> = HashMap::new();
     for hit in hits {
         ids.entry(hit.catalog_file.clone()).or_default().push(hit.entry.id);
@@ -170,8 +206,8 @@ mod tests {
     use std::collections::HashSet;
 
     use super::{
-        DirTree, NEWLINE, SortKey, TreeRow, filter_catalogs, format_timestamp, ids_by_catalog, rows_to_tsv,
-        selection_total, sort_entries, sort_hits, tree_text, visible_tree,
+        DirTree, HitRow, NEWLINE, SortKey, TreeRow, filter_catalogs, format_timestamp, hit_rows, ids_by_catalog,
+        rows_to_tsv, selection_total, sort_entries, sort_rows, tree_text, visible_tree, volume_names,
     };
     use crate::catalog::store::CatalogInfo;
     use crate::catalog::store::tests::sample_volume;
@@ -204,7 +240,7 @@ mod tests {
         // The same id in two catalogs stays apart.
         assert_eq!(ids[&std::path::PathBuf::from("Z.db")], [7, 1]);
         assert_eq!(ids[&std::path::PathBuf::from("A.db")], [1]);
-        assert!(ids_by_catalog(&[]).is_empty());
+        assert!(ids_by_catalog(&[] as &[Hit]).is_empty());
     }
 
     fn hits() -> Vec<Hit> {
@@ -220,25 +256,64 @@ mod tests {
         vec![a, b, c]
     }
 
-    fn order(hits: &[Hit]) -> Vec<&str> {
-        hits.iter().map(|h| h.entry.name.as_str()).collect()
+    fn order(rows: &[HitRow]) -> Vec<&str> {
+        rows.iter().map(|r| r[0].entry.name.as_str()).collect()
     }
 
     #[test]
-    fn sort_hits_each_key() {
-        let mut h = hits();
-        sort_hits(&mut h, SortKey::Name, true);
+    fn sort_rows_each_key() {
+        let mut h = hit_rows(hits(), false);
+        sort_rows(&mut h, SortKey::Name, true);
         assert_eq!(order(&h), ["Alpha.txt", "beta.txt", "dir"]);
-        sort_hits(&mut h, SortKey::Name, false);
+        sort_rows(&mut h, SortKey::Name, false);
         assert_eq!(order(&h), ["dir", "beta.txt", "Alpha.txt"]);
-        sort_hits(&mut h, SortKey::Size, true);
+        sort_rows(&mut h, SortKey::Size, true);
         assert_eq!(order(&h), ["dir", "beta.txt", "Alpha.txt"]);
-        sort_hits(&mut h, SortKey::Date, true);
+        sort_rows(&mut h, SortKey::Date, true);
         assert_eq!(order(&h), ["Alpha.txt", "dir", "beta.txt"]);
-        sort_hits(&mut h, SortKey::Path, true);
+        sort_rows(&mut h, SortKey::Path, true);
         assert_eq!(order(&h), ["dir", "beta.txt", "Alpha.txt"]);
-        sort_hits(&mut h, SortKey::Catalog, false);
+        sort_rows(&mut h, SortKey::Catalog, false);
         assert_eq!(order(&h), ["beta.txt", "dir", "Alpha.txt"]);
+    }
+
+    #[test]
+    fn identical_hits_grouped() {
+        let at = |catalog: &str, name: &str, size: Option<u64>, mtime: i64, path: &str| {
+            let mut h = hit(catalog, false, name, size);
+            h.entry.mtime = Some(mtime);
+            h.path = path.to_owned();
+            h
+        };
+        let hits = vec![
+            at("NAS", "a.txt", Some(1), 10, "/x"),
+            at("Backup 2", "a.txt", Some(1), 10, "/x"),
+            at("Backup 1", "a.txt", Some(1), 10, "/x"),
+            // Each differs from the a.txt above in one field only.
+            at("Backup 1", "A.txt", Some(1), 10, "/x"),
+            at("Backup 1", "a.txt", Some(2), 10, "/x"),
+            at("Backup 1", "a.txt", Some(1), 11, "/x"),
+            at("Backup 1", "a.txt", Some(1), 10, "/y"),
+            // Folders have no size: name, date and path decide.
+            at("NAS", "dir", None, 5, "/"),
+            at("Backup 1", "dir", None, 5, "/"),
+        ];
+        let rows = hit_rows(hits.clone(), true);
+        let shown: Vec<(&str, String)> = rows.iter().map(|r| (r[0].entry.name.as_str(), volume_names(r))).collect();
+        assert_eq!(
+            shown,
+            [
+                ("a.txt", "Backup 1, Backup 2, NAS".to_owned()),
+                ("A.txt", "Backup 1".to_owned()),
+                ("a.txt", "Backup 1".to_owned()),
+                ("a.txt", "Backup 1".to_owned()),
+                ("a.txt", "Backup 1".to_owned()),
+                ("dir", "Backup 1, NAS".to_owned()),
+            ]
+        );
+        // Not grouped: one row per hit, unchanged.
+        let single = hit_rows(hits.clone(), false);
+        assert_eq!(single.into_iter().flatten().collect::<Vec<_>>(), hits);
     }
 
     #[test]

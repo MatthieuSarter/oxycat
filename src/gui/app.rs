@@ -301,7 +301,7 @@ impl eframe::App for OxycatApp {
         let ctx = ui.ctx().clone();
         self.poll_catalogs();
         self.poll_job();
-        if let Err(e) = self.search.poll() {
+        if let Err(e) = self.search.poll(self.settings.group_identical) {
             self.banner = Some(fill(self.fmt.s.err_other, &[("error", e)]));
         }
         self.handle_drop(&ctx);

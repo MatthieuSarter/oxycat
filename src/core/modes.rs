@@ -44,6 +44,12 @@ impl SearchMode {
     pub fn is_grouping(self) -> bool {
         !matches!(self, SearchMode::Standard | SearchMode::Parents)
     }
+
+    /// Whether the mode exists to show the same file on several volumes, so identical results must not be grouped.
+    #[must_use]
+    pub fn shows_copies(self) -> bool {
+        matches!(self, SearchMode::Duplicates | SearchMode::SameNames | SearchMode::SameSizes)
+    }
 }
 
 /// The identity of a file for duplicate detection: folded name and size.
@@ -117,6 +123,12 @@ pub(crate) mod tests {
 
     fn view(hits: &[Hit]) -> Vec<(&str, &str, Option<u64>)> {
         hits.iter().map(|h| (h.catalog_name.as_str(), h.entry.name.as_str(), h.entry.size)).collect()
+    }
+
+    #[test]
+    fn copy_modes() {
+        let copies: Vec<SearchMode> = SearchMode::ALL.into_iter().filter(|m| m.shows_copies()).collect();
+        assert_eq!(copies, [SearchMode::Duplicates, SearchMode::SameNames, SearchMode::SameSizes]);
     }
 
     #[test]
