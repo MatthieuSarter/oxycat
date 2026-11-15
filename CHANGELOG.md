@@ -1,6 +1,23 @@
 # CHANGELOG
 
 
+## v0.3.0 (2026-11-15)
+
+### Features
+
+- **search**: ✨ add a "Search within results" checkbox
+  ([`6e41403`](https://github.com/MatthieuSarter/oxycat/commit/6e4140356fe492c97746fa12968855210184d60f))
+
+- **search**: ✨ compare folders on their children names
+  ([`1c09eaa`](https://github.com/MatthieuSarter/oxycat/commit/1c09eaaabaf29e739a6e0c493de221cbf4db7561))
+
+- **search**: ✨ group identical results across volumes
+  ([`d84f028`](https://github.com/MatthieuSarter/oxycat/commit/d84f028ef750214941d6978926ab667622de928f))
+
+- **search**: ✨ support AND, OR and parentheses in the search field
+  ([`b2b2ed1`](https://github.com/MatthieuSarter/oxycat/commit/b2b2ed1191855ac568512e8ac4909f5561e1298e))
+
+
 ## v0.2.0 (2026-11-11)
 
 ### Bug Fixes
