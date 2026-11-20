@@ -23,7 +23,7 @@ LED = "#7CF0B0"
 MEDIA = [("#7A6F66", "#9A8F86"), ("#C9BFB4", "#E2D9CE"), ("#23263A", "#41466A")]
 
 
-def draw_icon() -> Image.Image:
+def draw_icon() -> Image.Image:  # type: ignore[no-any-unimported]
     """Draw the icon at UNIT * SCALE pixels.
 
     Returns:
