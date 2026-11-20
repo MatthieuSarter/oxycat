@@ -65,8 +65,6 @@ pub(super) struct SearchTab {
     base: Option<(usize, bool)>,
     /// The volume chooser, when it is open.
     pub choice: Option<VolumeChoice>,
-    /// Whether the search field still has to take the focus (once, when the application starts).
-    focus_pattern: bool,
 }
 
 impl Default for SearchTab {
@@ -74,7 +72,6 @@ impl Default for SearchTab {
         SearchTab {
             form: SearchForm::default(),
             show_options: false,
-            focus_pattern: true,
             error: None,
             rows: Vec::new(),
             mode: SearchMode::default(),
@@ -221,7 +218,8 @@ impl OxycatApp {
                 .hint_text(s.search_hint)
                 .desired_width(ui.available_width());
             let response = ui.add(field);
-            if std::mem::take(&mut self.search.focus_pattern) {
+            // The field takes the focus when the application starts (its first pass).
+            if ui.ctx().cumulative_pass_nr() == 0 {
                 response.request_focus();
             }
             run |= enter(&response, ui);
