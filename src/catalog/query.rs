@@ -181,7 +181,7 @@ pub(crate) mod tests {
     use std::path::MAIN_SEPARATOR as SEP;
     use std::path::Path;
 
-    use chrono::{TimeZone, Utc};
+    use jiff::Timestamp;
 
     use super::{ancestors, child_names, children, dir_paths, parent_path, search_catalog, subtree_dirs};
     use crate::catalog::scan::{ScanControl, ScanOptions, catalog};
@@ -340,16 +340,16 @@ pub(crate) mod tests {
     #[test]
     fn search_date_bounds() {
         let (t, _) = tree();
-        let old = Utc.with_ymd_and_hms(2019, 3, 2, 12, 0, 0).unwrap();
+        let old: Timestamp = "2019-03-02T12:00:00Z".parse().unwrap();
         let file = std::fs::File::options().write(true).open(t.path().join("src/BD/zz.txt")).unwrap();
-        file.set_modified(old.into()).unwrap();
+        file.set_modified(old.try_into().unwrap()).unwrap();
         drop(file);
         // Re-catalog so the new date is recorded.
         let dir = CatalogDir::new(t.path().to_path_buf());
         let opts = ScanOptions { name: "T".to_owned(), ..ScanOptions::default() };
         let info = catalog(&dir, &t.path().join("src"), &opts, &ScanControl::default()).unwrap();
         let conn = open_read(&info.file).unwrap();
-        let day = old.timestamp();
+        let day = old.as_second();
         let before = SearchQuery { to: Some(day + 1), ..q("") };
         assert_eq!(names(&search_catalog(&conn, &before, &info, None, None).unwrap()), ["zz.txt"]);
         let after = SearchQuery { from: Some(day + 1), kind: KindFilter::Files, ..q("zz") };

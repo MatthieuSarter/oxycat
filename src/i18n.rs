@@ -67,7 +67,7 @@ pub fn number_format(lang: Lang) -> NumberFormat {
     }
 }
 
-/// Default `chrono` date-time format of a language.
+/// Default `strftime`-style date-time format of a language.
 #[must_use]
 pub fn date_format(lang: Lang) -> &'static str {
     match lang {

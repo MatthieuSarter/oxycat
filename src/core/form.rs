@@ -1,6 +1,8 @@
 //! Turning the search form's text fields into a [`SearchQuery`].
 
-use chrono::{Days, NaiveDate, NaiveTime, TimeZone};
+use jiff::ToSpan;
+use jiff::civil::Date;
+use jiff::tz::TimeZone;
 
 use super::model::{KindFilter, SearchQuery};
 use super::modes::SearchMode;
@@ -45,20 +47,20 @@ pub enum FormError {
 ///
 /// # Errors
 /// The first invalid field.
-pub fn parse_form<Tz: TimeZone>(form: &SearchForm, today: NaiveDate, tz: &Tz) -> Result<SearchQuery, FormError> {
+pub fn parse_form(form: &SearchForm, today: Date, tz: &TimeZone) -> Result<SearchQuery, FormError> {
     fn optional(text: &str) -> Option<&str> {
         Some(text.trim()).filter(|t| !t.is_empty())
     }
     let pattern = Expr::parse(&form.pattern).map_err(FormError::Pattern)?;
     let size = |text: &str, error| optional(text).map(|t| parse_size(t).map_err(|_| error)).transpose();
-    let day = |text: &str, error, days_after: u64| {
+    let day = |text: &str, error, days_after: i64| {
         optional(text)
             .map(|t| {
                 parse_date(t, today)
                     .ok()
-                    .and_then(|d| d.checked_add_days(Days::new(days_after)))
-                    .and_then(|d| tz.from_local_datetime(&d.and_time(NaiveTime::MIN)).earliest())
-                    .map(|start| start.timestamp())
+                    .and_then(|d| d.checked_add(days_after.days()).ok())
+                    .and_then(|d| d.to_zoned_datetime(tz.clone()).ok())
+                    .map(|start| start.timestamp().as_second())
                     .ok_or(error)
             })
             .transpose()
@@ -77,19 +79,20 @@ pub fn parse_form<Tz: TimeZone>(form: &SearchForm, today: NaiveDate, tz: &Tz) ->
 
 #[cfg(test)]
 mod tests {
-    use chrono::{FixedOffset, NaiveDate};
+    use jiff::civil::Date;
+    use jiff::tz::{Offset, TimeZone};
 
     use super::{FormError, SearchForm, parse_form};
     use crate::core::model::KindFilter;
     use crate::core::modes::SearchMode;
     use crate::core::pattern::PatternError;
 
-    fn today() -> NaiveDate {
-        NaiveDate::from_ymd_opt(2026, 11, 11).unwrap()
+    fn today() -> Date {
+        Date::constant(2026, 11, 11)
     }
 
-    fn paris() -> FixedOffset {
-        FixedOffset::east_opt(3600).unwrap()
+    fn paris() -> TimeZone {
+        TimeZone::fixed(Offset::constant(1))
     }
 
     #[test]

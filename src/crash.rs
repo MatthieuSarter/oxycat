@@ -13,7 +13,7 @@ pub fn install(log: PathBuf) {
         let thread = std::thread::current();
         let report = format!(
             "{} oxycat {}, thread '{}': {info}",
-            chrono::Utc::now().to_rfc3339(),
+            jiff::Timestamp::now(),
             env!("CARGO_PKG_VERSION"),
             thread.name().unwrap_or("unnamed"),
         );

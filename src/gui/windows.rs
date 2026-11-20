@@ -1,6 +1,6 @@
 //! Settings and About windows.
 
-use chrono::Utc;
+use jiff::tz::TimeZone;
 
 use super::app::OxycatApp;
 use crate::config::Settings;
@@ -33,7 +33,7 @@ impl SettingsDraft {
     fn apply(&self, base: &Settings) -> Option<Settings> {
         let hit_limit = self.hit_limit.trim().parse::<usize>().ok().filter(|n| *n > 0)?;
         let date_format = Some(self.date_format.trim().to_owned()).filter(|f| !f.is_empty());
-        if date_format.as_deref().is_some_and(|f| format_timestamp(0, f, &Utc).is_empty()) {
+        if date_format.as_deref().is_some_and(|f| format_timestamp(0, f, &TimeZone::UTC).is_empty()) {
             return None;
         }
         Some(Settings {
@@ -169,7 +169,7 @@ mod tests {
         draft.hit_limit = "0".to_owned();
         assert_eq!(draft.apply(&base), None);
         draft.hit_limit = "50".to_owned();
-        draft.date_format = "%Q".to_owned();
+        draft.date_format = "bad %".to_owned();
         assert_eq!(draft.apply(&base), None);
         draft.date_format = "%Y".to_owned();
         draft.thousands_separator = " ".to_owned();

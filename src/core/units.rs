@@ -2,7 +2,8 @@
 //!
 //! Size units are decimal, as in Cathy: `K` = 10³, `M` = 10⁶, `G` = 10⁹, `T` = 10¹².
 
-use chrono::NaiveDate;
+use jiff::Span;
+use jiff::civil::Date;
 
 /// A user input that could not be parsed.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -50,22 +51,28 @@ fn parse_digits(text: &str) -> Option<u64> {
 ///
 /// # Errors
 /// [`InputError::Invalid`] when the text matches none of these forms or names an impossible date.
-pub fn parse_date(input: &str, today: NaiveDate) -> Result<NaiveDate, InputError> {
+pub fn parse_date(input: &str, today: Date) -> Result<Date, InputError> {
     let text = input.trim();
     if let Some(days) = text.strip_prefix('-') {
         return parse_digits(days)
-            .and_then(|n| today.checked_sub_days(chrono::Days::new(n)))
+            .and_then(|n| i64::try_from(n).ok())
+            .and_then(|n| Span::new().try_days(n).ok())
+            .and_then(|span| today.checked_sub(span).ok())
             .ok_or(InputError::Invalid);
     }
     let fields: Vec<&str> = text.split('-').collect();
     let number = |s: &str, len: std::ops::RangeInclusive<usize>| {
-        if len.contains(&s.len()) { parse_digits(s).and_then(|n| u32::try_from(n).ok()) } else { None }
+        if len.contains(&s.len()) { parse_digits(s).and_then(|n| i16::try_from(n).ok()) } else { None }
     };
-    let year = fields.first().and_then(|y| number(y, 4..=4)).and_then(|y| i32::try_from(y).ok());
+    let year = fields.first().and_then(|y| number(y, 4..=4));
     let month = fields.get(1).map_or(Some(1), |m| number(m, 1..=2));
     let day = fields.get(2).map_or(Some(1), |d| number(d, 1..=2));
     match (year, month, day) {
-        (Some(y), Some(m), Some(d)) if fields.len() <= 3 => NaiveDate::from_ymd_opt(y, m, d).ok_or(InputError::Invalid),
+        (Some(y), Some(m), Some(d)) if fields.len() <= 3 => {
+            let (m, d) =
+                (i8::try_from(m).map_err(|_| InputError::Invalid)?, i8::try_from(d).map_err(|_| InputError::Invalid)?);
+            Date::new(y, m, d).map_err(|_| InputError::Invalid)
+        }
         _ => Err(InputError::Invalid),
     }
 }
@@ -110,7 +117,7 @@ pub fn format_size(bytes: u64, nf: &NumberFormat) -> String {
 #[cfg(test)]
 mod tests {
     use super::{InputError, NumberFormat, format_int, format_size, parse_date, parse_size};
-    use chrono::NaiveDate;
+    use jiff::civil::Date;
 
     const FR: NumberFormat = NumberFormat {
         thousands: std::borrow::Cow::Borrowed("\u{202F}"),
@@ -120,8 +127,8 @@ mod tests {
     const EN: NumberFormat =
         NumberFormat { thousands: std::borrow::Cow::Borrowed(","), decimal: '.', units: ["B", "KB", "MB", "GB", "TB"] };
 
-    fn d(y: i32, m: u32, day: u32) -> NaiveDate {
-        NaiveDate::from_ymd_opt(y, m, day).unwrap()
+    fn d(y: i16, m: i8, day: i8) -> Date {
+        Date::constant(y, m, day)
     }
 
     #[test]

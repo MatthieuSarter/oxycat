@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use std::sync::mpsc::{Receiver, TryRecvError, channel};
 use std::time::Duration;
 
-use chrono::Local;
+use jiff::ZonedDateTime;
 
 use super::app::OxycatApp;
 use super::folders_tab::Target;
@@ -410,8 +410,8 @@ impl OxycatApp {
 
     /// Validates the form and starts the search on a background thread.
     fn run_search(&mut self) {
-        let today = Local::now().date_naive();
-        let query = match parse_form(&self.search.form, today, &Local) {
+        let now = ZonedDateTime::now();
+        let query = match parse_form(&self.search.form, now.date(), now.time_zone()) {
             Ok(query) => query,
             Err(error) => {
                 self.search.error = Some(error);

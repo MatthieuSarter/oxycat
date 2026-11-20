@@ -2,10 +2,12 @@
 
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
-use std::fmt::{Display, Write};
+use std::fmt::Write;
 use std::path::PathBuf;
 
-use chrono::TimeZone;
+use jiff::Timestamp;
+use jiff::fmt::strtime;
+use jiff::tz::TimeZone;
 
 use super::fold::fold;
 use super::model::{Entry, Hit};
@@ -184,26 +186,19 @@ pub fn visible_tree<'a>(root: &'a str, tree: &'a DirTree, expanded: &HashSet<Opt
     out
 }
 
-/// Formats a UTC Unix timestamp in a time zone with a `chrono` format; empty when out of range or when the format is
+/// Formats a UTC Unix timestamp in a time zone with a `strftime`-style format; empty when out of range or when the format is
 /// invalid (it may come from the settings file).
 #[must_use]
-pub fn format_timestamp<Tz: TimeZone>(ts: i64, fmt: &str, tz: &Tz) -> String
-where
-    Tz::Offset: Display,
-{
-    let Some(time) = tz.timestamp_opt(ts, 0).single() else {
-        return String::new();
-    };
-    let mut out = String::new();
-    if write!(out, "{}", time.format(fmt)).is_err() {
-        return String::new();
-    }
-    out
+pub fn format_timestamp(ts: i64, fmt: &str, tz: &TimeZone) -> String {
+    Timestamp::from_second(ts)
+        .ok()
+        .and_then(|t| strtime::format(fmt, &t.to_zoned_datetime(tz.clone())).ok())
+        .unwrap_or_default()
 }
 
 #[cfg(test)]
 mod tests {
-    use chrono::{FixedOffset, Utc};
+    use jiff::tz::{Offset, TimeZone};
 
     use std::collections::HashSet;
 
@@ -396,10 +391,10 @@ mod tests {
 
     #[test]
     fn timestamps() {
-        assert_eq!(format_timestamp(0, "%Y-%m-%d %H:%M", &Utc), "1970-01-01 00:00");
-        let paris = FixedOffset::east_opt(3600).unwrap();
+        assert_eq!(format_timestamp(0, "%Y-%m-%d %H:%M", &TimeZone::UTC), "1970-01-01 00:00");
+        let paris = TimeZone::fixed(Offset::constant(1));
         assert_eq!(format_timestamp(0, "%d/%m/%Y %H:%M", &paris), "01/01/1970 01:00");
-        assert_eq!(format_timestamp(i64::MAX, "%Y", &Utc), "");
-        assert_eq!(format_timestamp(0, "%Q bad", &Utc), "");
+        assert_eq!(format_timestamp(i64::MAX, "%Y", &TimeZone::UTC), "");
+        assert_eq!(format_timestamp(0, "bad %", &TimeZone::UTC), "");
     }
 }

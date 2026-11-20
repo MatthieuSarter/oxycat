@@ -45,7 +45,7 @@ pub struct Settings {
     pub hit_limit: usize,
     /// Ignore patterns proposed when cataloging (Cathy syntax).
     pub default_ignore: String,
-    /// `chrono` date-time format overriding the language's default.
+    /// `strftime`-style date-time format overriding the language's default.
     pub date_format: Option<String>,
     /// Thousands separator overriding the language's default.
     pub thousands_separator: Option<String>,

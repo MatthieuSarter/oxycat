@@ -28,7 +28,7 @@ defaults are used (the file is not overwritten until a setting is changed).
 | `language` | *(OS locale)* | `"fr"`, `"en"` or `"es"`; when absent, French or Spanish OS locales select those languages, anything else English |
 | `hit_limit` | `10000` | maximum number of search results |
 | `default_ignore` | `""` | ignore patterns proposed when cataloging, e.g. `"*.tmp; \\Temp*"` (see the user guide) |
-| `date_format` | *(language default)* | [`chrono` format](https://docs.rs/chrono/latest/chrono/format/strftime/index.html), e.g. `"%Y-%m-%d %H:%M"` |
+| `date_format` | *(language default)* | [`strftime`-style format](https://docs.rs/jiff/latest/jiff/fmt/strtime/index.html), e.g. `"%Y-%m-%d %H:%M"` |
 | `thousands_separator` | *(language default)* | separator used between digit groups, e.g. `" "` |
 | `catalogs_collapsed` | `false` | catalog panel collapsed to the bare list |
 | `group_identical` | `true` | search results identical but for their volume shown as one row |

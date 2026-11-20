@@ -9,11 +9,11 @@ repository = "https://github.com/MatthieuSarter/oxycat"
 
 [dependencies]
 anyhow = "1.0.104"
-chrono = { version = "0.4.45", default-features = false, features = ["std", "clock"] }
 clap = { version = "4.6.7", features = ["derive"] }
 eframe = "0.37.0"
 egui = { version = "0.37.0", features = ["monochrome_emoji_fonts"] }
 egui_extras = "0.37.0"
+jiff = "1.0.1"
 opener = { version = "0.9.0", features = ["reveal"] }
 rayon = "1.12.0"
 rfd = "0.18.0"

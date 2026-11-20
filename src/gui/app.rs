@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant, SystemTime};
 
-use chrono::Local;
+use jiff::tz::TimeZone;
 
 use super::add_dialog::{AddDialog, ScanJob};
 use super::folders_tab::FoldersTab;
@@ -54,7 +54,7 @@ impl Fmt {
     }
 
     pub fn date(&self, ts: Option<i64>) -> String {
-        ts.map(|t| format_timestamp(t, &self.date_pattern, &Local)).unwrap_or_default()
+        ts.map(|t| format_timestamp(t, &self.date_pattern, &TimeZone::system())).unwrap_or_default()
     }
 }
 
