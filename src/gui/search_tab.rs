@@ -65,6 +65,8 @@ pub(super) struct SearchTab {
     base: Option<(usize, bool)>,
     /// The volume chooser, when it is open.
     pub choice: Option<VolumeChoice>,
+    /// Whether the search field still has to take the focus (once, when the application starts).
+    focus_pattern: bool,
 }
 
 impl Default for SearchTab {
@@ -72,6 +74,7 @@ impl Default for SearchTab {
         SearchTab {
             form: SearchForm::default(),
             show_options: false,
+            focus_pattern: true,
             error: None,
             rows: Vec::new(),
             mode: SearchMode::default(),
@@ -212,10 +215,15 @@ impl OxycatApp {
             if ui.button(format!("{} {arrow}", s.options)).clicked() {
                 self.search.show_options = !self.search.show_options;
             }
+            // An explicit id: an automatic one can match a widget of the Folders tab, which would keep the focus there.
             let field = egui::TextEdit::singleline(&mut self.search.form.pattern)
+                .id_salt("search_pattern")
                 .hint_text(s.search_hint)
                 .desired_width(ui.available_width());
             let response = ui.add(field);
+            if std::mem::take(&mut self.search.focus_pattern) {
+                response.request_focus();
+            }
             run |= enter(&response, ui);
         });
         if self.search.show_options {

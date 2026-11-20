@@ -4,7 +4,7 @@ use std::time::{Duration, Instant};
 
 use egui::accesskit::Role;
 use egui_kittest::Harness;
-use egui_kittest::kittest::Queryable;
+use egui_kittest::kittest::{NodeT, Queryable};
 
 use super::app::{OxycatApp, Tab};
 use crate::catalog::query::tests::catalog_of;
@@ -41,7 +41,8 @@ fn search_then_open_folder() {
     let fields = harness.get_all_by_role(Role::TextInput).collect::<Vec<_>>();
     // The search field is the widest text input: the last one laid out in the central panel.
     let search_field = fields.last().unwrap();
-    search_field.focus();
+    // It has the focus from the start.
+    assert!(search_field.accesskit_node().is_focused());
     search_field.type_text("asterix");
     harness.run_steps(2);
     harness.get_by_label("Search").click();
