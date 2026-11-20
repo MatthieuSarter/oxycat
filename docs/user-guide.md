@@ -81,7 +81,8 @@ or the words `AND` / `OR` between double quotes. The *Parents* and archive modes
   - *Archived*: the opposite.
 
 Results are capped by the *Maximum number of results* setting (10 000 by default); the status bar says when the limit
-is reached. Click a column header to sort. **Double-click a result to open its folder** in the Folders tab.
+is reached. Click a column header to sort. **Double-click a result to open it** in the Folders tab: a folder is
+opened, a file is shown selected in its folder.
 
 **Group identical results** (in *Options*, checked by default): the same file or folder found on several media (backups,
 copies of a disk) is shown as one row, whose *Volume* column lists the volumes (`Backup 1, Backup 2, NAS`). Files must

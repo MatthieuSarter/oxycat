@@ -43,31 +43,48 @@ fn search_then_open_folder() {
     let search_field = fields.last().unwrap();
     // It has the focus from the start.
     assert!(search_field.accesskit_node().is_focused());
-    search_field.type_text("asterix");
+    search_field.type_text("asterix OR tintin");
     harness.run_steps(2);
     harness.get_by_label("Search").click();
     step_until(&mut harness, |app| !app.search.rows.is_empty());
     // Accent-insensitive: "asterix" finds the "Astérix" folder.
-    assert_eq!(harness.state().search.rows.len(), 1);
+    assert_eq!(harness.state().search.rows.len(), 2);
     assert!(shows(&harness, "Astérix"));
 
-    // Double-click the result (after a pause, or egui counts a triple click with the Search click): the Folders
+    // Double-click a file result (after a pause, or egui counts a triple click with the Search click): the Folders
     // tab opens on its parent (BD) with the result selected.
-    harness.run_steps(30);
-    for _ in 0..2 {
-        harness.query_all_by(|n| n.value().is_some_and(|v| v == "Astérix")).next().unwrap().click();
-        harness.step();
-    }
-    harness.run_steps(3);
+    double_click(&mut harness, "Tintin.cbz");
     assert_eq!(harness.state().tab, Tab::Folders);
     assert_eq!(harness.state().folders.selection.rows.len(), 1);
-    assert!(shows(&harness, "Tintin.cbz"));
+    assert!(shows(&harness, "Astérix"));
 
-    // Backspace goes up to the top of the source.
+    // Double-click a folder result: the Folders tab opens inside it.
+    harness.state_mut().tab = Tab::Search;
+    harness.run_steps(3);
+    double_click(&mut harness, "Astérix");
+    assert_eq!(harness.state().tab, Tab::Folders);
+    assert!(harness.state().folders.selection.rows.is_empty());
+    assert!(shows(&harness, "01.cbz"));
+    assert!(!shows(&harness, "Tintin.cbz"));
+
+    // Backspace goes up to its parent, then to the top of the source.
+    harness.key_press(egui::Key::Backspace);
+    harness.run_steps(3);
+    assert!(shows(&harness, "Tintin.cbz"));
     harness.key_press(egui::Key::Backspace);
     harness.run_steps(3);
     assert!(harness.query_by_role_and_label(Role::Label, "BD").is_some());
     assert!(!shows(&harness, "Tintin.cbz"));
+}
+
+/// Double-clicks the first widget displaying `text`, after a pause so that egui does not count a previous click in.
+fn double_click(harness: &mut Harness<'static, OxycatApp>, text: &str) {
+    harness.run_steps(30);
+    for _ in 0..2 {
+        harness.query_all_by(|n| n.value().is_some_and(|v| v == text)).next().unwrap().click();
+        harness.step();
+    }
+    harness.run_steps(3);
 }
 
 /// Whether some widget displays exactly `text`.

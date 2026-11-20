@@ -356,7 +356,7 @@ impl OxycatApp {
         }
     }
 
-    /// Opens the folder of a row (`action` is `None`) or applies a file action to it: directly for a single volume,
+    /// Opens a row in the Folders tab (`action` is `None`, see [`Self::act_on_hit`]) or applies a file action to it: directly for a single volume,
     /// through the volume chooser for a grouped row.
     fn act_on_row(&mut self, i: usize, action: Option<FileAction>) {
         let Some(row) = self.search.rows.get(i) else {
@@ -370,8 +370,11 @@ impl OxycatApp {
         }
     }
 
+    /// Opens a folder hit itself, or the folder of a file hit with that file selected (`action` is `None`), or applies
+    /// a file action to the hit.
     fn act_on_hit(&mut self, hit: &Hit, action: Option<FileAction>) {
         match action {
+            None if hit.entry.is_dir => self.open_folder(&hit.catalog_file, Some(hit.entry.id), None),
             None => self.open_folder(&hit.catalog_file, hit.entry.parent_id, Some(hit.entry.id)),
             Some(action) => self.file_action(action, &[target(hit, hit.catalog_name.clone())]),
         }
