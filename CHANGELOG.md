@@ -1,6 +1,20 @@
 # CHANGELOG
 
 
+## v0.3.1 (2026-11-20)
+
+### Bug Fixes
+
+- **deps**: 🐛 replace unmaintained chrono with jiff
+  ([`17f9618`](https://github.com/MatthieuSarter/oxycat/commit/17f9618af316236c5f452efc3cb05588a99d7675))
+
+- **search**: 🐛 focus the search field at startup
+  ([`74ea291`](https://github.com/MatthieuSarter/oxycat/commit/74ea29166d641c6eb858550f5521ffc34880768c))
+
+- **search**: 🐛 open a folder result itself on double-click
+  ([`acc8237`](https://github.com/MatthieuSarter/oxycat/commit/acc82372240c044b13b7dccc6fb8d6054ca91642))
+
+
 ## v0.3.0 (2026-11-15)
 
 ### Features
